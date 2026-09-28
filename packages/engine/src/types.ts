@@ -1,0 +1,241 @@
+export const RESOURCES = ["wood", "brick", "sheep", "wheat", "ore"] as const;
+
+export type Resource = (typeof RESOURCES)[number];
+export type Terrain = Resource | "desert";
+export type ResourceBundle = Record<Resource, number>;
+
+export const DEVELOPMENT_CARD_TYPES = [
+  "knight",
+  "victory-point",
+  "road-building",
+  "year-of-plenty",
+  "monopoly",
+] as const;
+
+export type DevelopmentCardType = (typeof DEVELOPMENT_CARD_TYPES)[number];
+
+export interface DevelopmentCard {
+  id: string;
+  type: DevelopmentCardType;
+}
+
+export interface HeldDevelopmentCard extends DevelopmentCard {
+  boughtOnTurn: number;
+}
+
+export interface Hex {
+  id: string;
+  q: number;
+  r: number;
+  terrain: Terrain;
+  number: number | null;
+  neighborHexIds: string[];
+}
+
+export interface Vertex {
+  id: string;
+  x: number;
+  y: number;
+  hexIds: string[];
+  edgeIds: string[];
+  adjacentVertexIds: string[];
+}
+
+export interface Edge {
+  id: string;
+  vertexIds: [string, string];
+  hexIds: string[];
+}
+
+export type PortType = "generic" | Resource;
+
+export interface Port {
+  id: string;
+  type: PortType;
+  ratio: 2 | 3;
+  edgeId: string;
+  vertexIds: [string, string];
+}
+
+export interface Board {
+  hexes: Hex[];
+  vertices: Vertex[];
+  edges: Edge[];
+  ports: Port[];
+}
+
+export interface PlayerConfig {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface PlayerState {
+  id: string;
+  name: string;
+  color: string;
+  resources: ResourceBundle;
+  developmentCards: HeldDevelopmentCard[];
+  roads: string[];
+  settlements: string[];
+  cities: string[];
+  playedKnights: number;
+}
+
+export type GamePhase =
+  | "setup-settlement"
+  | "setup-road"
+  | "awaiting-roll"
+  | "discard"
+  | "robber"
+  | "main"
+  | "trade"
+  | "finished";
+
+export interface TradeOffer {
+  id: string;
+  fromPlayerId: string;
+  give: ResourceBundle;
+  want: ResourceBundle;
+  acceptedBy: string[];
+  rejectedBy: string[];
+}
+
+export interface DiceRoll {
+  dice: [number, number];
+  total: number;
+}
+
+export interface GameState {
+  board: Board;
+  players: PlayerState[];
+  bank: ResourceBundle;
+  developmentDeck: DevelopmentCard[];
+  phase: GamePhase;
+  currentPlayerIndex: number;
+  setupIndex: number;
+  setupRoadFromVertexId: string | null;
+  turnNumber: number;
+  robberHexId: string;
+  pendingDiscards: Record<string, number>;
+  activeTrade: TradeOffer | null;
+  longestRoadHolderId: string | null;
+  largestArmyHolderId: string | null;
+  playedDevelopmentCardThisTurn: boolean;
+  lastRoll: DiceRoll | null;
+  winnerId: string | null;
+  rngState: number;
+  nextTradeId: number;
+}
+
+export interface CreateGameOptions {
+  players: PlayerConfig[];
+  seed: number | string;
+}
+
+export type GameAction =
+  | { type: "place-setup-settlement"; playerId: string; vertexId: string }
+  | { type: "place-setup-road"; playerId: string; edgeId: string }
+  | { type: "roll"; playerId: string }
+  | { type: "discard"; playerId: string; resources: ResourceBundle }
+  | {
+      type: "move-robber";
+      playerId: string;
+      hexId: string;
+      victimId: string | null;
+    }
+  | { type: "build-road"; playerId: string; edgeId: string }
+  | { type: "build-settlement"; playerId: string; vertexId: string }
+  | { type: "build-city"; playerId: string; vertexId: string }
+  | { type: "buy-development-card"; playerId: string }
+  | {
+      type: "play-knight";
+      playerId: string;
+      cardId: string;
+      hexId: string;
+      victimId: string | null;
+    }
+  | {
+      type: "play-monopoly";
+      playerId: string;
+      cardId: string;
+      resource: Resource;
+    }
+  | {
+      type: "play-year-of-plenty";
+      playerId: string;
+      cardId: string;
+      resources: Resource[];
+    }
+  | {
+      type: "play-road-building";
+      playerId: string;
+      cardId: string;
+      edgeIds: string[];
+    }
+  | {
+      type: "make-offer";
+      playerId: string;
+      give: ResourceBundle;
+      want: ResourceBundle;
+    }
+  | {
+      type: "counter-offer";
+      playerId: string;
+      give: ResourceBundle;
+      want: ResourceBundle;
+    }
+  | { type: "accept-offer"; playerId: string }
+  | { type: "reject-offer"; playerId: string }
+  | { type: "confirm-offer"; playerId: string; partnerId: string }
+  | { type: "cancel-offer"; playerId: string }
+  | {
+      type: "maritime-trade";
+      playerId: string;
+      giveResource: Resource;
+      giveAmount: number;
+      receiveResource: Resource;
+    }
+  | { type: "end-turn"; playerId: string };
+
+export interface PlayerPublicView {
+  id: string;
+  name: string;
+  color: string;
+  resourceCardCount: number;
+  developmentCardCount: number;
+  roadIds: string[];
+  settlementVertexIds: string[];
+  cityVertexIds: string[];
+  roadsBuilt: number;
+  settlementsBuilt: number;
+  citiesBuilt: number;
+  playedKnights: number;
+  publicVictoryPoints: number;
+  isCurrentPlayer: boolean;
+}
+
+export interface PlayerPrivateView {
+  resources: ResourceBundle;
+  developmentCards: HeldDevelopmentCard[];
+  hiddenVictoryPoints: number;
+  totalVictoryPoints: number;
+  pendingDiscardCount: number;
+}
+
+export interface PlayerGameView {
+  board: Board;
+  bank: ResourceBundle;
+  phase: GamePhase;
+  turnNumber: number;
+  playedDevelopmentCardThisTurn: boolean;
+  currentPlayerId: string;
+  players: PlayerPublicView[];
+  self: PlayerPrivateView;
+  robberHexId: string;
+  lastRoll: DiceRoll | null;
+  activeTrade: TradeOffer | null;
+  longestRoadHolderId: string | null;
+  largestArmyHolderId: string | null;
+  winnerId: string | null;
+}
