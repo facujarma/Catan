@@ -1,0 +1,28 @@
+{
+  "name": "catan-online",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter @catan/web dev",
+    "build": "bun --filter @catan/web build",
+    "test": "bun --filter @catan/engine test",
+    "typecheck": "bun --filter @catan/engine typecheck && bun --filter @catan/web typecheck && tsc -p convex/tsconfig.json",
+    "convex:dev": "bunx convex dev",
+    "convex:deploy": "bunx convex deploy",
+    "deploy:web": "bunx vercel --prod"
+  },
+  "dependencies": {
+    "@catan/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "convex": "^1.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
