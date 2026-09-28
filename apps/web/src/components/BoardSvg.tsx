@@ -1,4 +1,12 @@
-import type { PlayerGameView, Resource } from "@catan/engine";
+import type { PlayerGameView } from "@catan/engine";
+import {
+  GENERIC_PORT_FILE,
+  pieceFile,
+  RESOURCE_PORT_FILES,
+  ROBBER_ICON_FILE,
+  TILE_FILES,
+  TILE_FRAME_FILE,
+} from "../assets";
 import type { LegalPlacements } from "../model";
 
 export type BoardMode = "road" | "free-road" | "settlement" | "city" | "robber" | null;
@@ -18,7 +26,7 @@ const VIEW_WIDTH = 960;
 const VIEW_HEIGHT = 720;
 const ORIGIN_X = VIEW_WIDTH / 2;
 const ORIGIN_Y = VIEW_HEIGHT / 2;
-const SCALE = 68;
+const SCALE = 72;
 
 const TERRAIN_FILL: Record<string, string> = {
   wood: "url(#terrain-wood)",
@@ -27,23 +35,6 @@ const TERRAIN_FILL: Record<string, string> = {
   wheat: "url(#terrain-wheat)",
   ore: "url(#terrain-ore)",
   desert: "url(#terrain-desert)",
-};
-
-const TERRAIN_BORDER: Record<string, string> = {
-  wood: "#2f6a2b",
-  brick: "#94451f",
-  sheep: "#6f9636",
-  wheat: "#b3942a",
-  ore: "#6c7885",
-  desert: "#bda868",
-};
-
-const RESOURCE_LABEL: Record<Resource, string> = {
-  wood: "M",
-  brick: "L",
-  sheep: "O",
-  wheat: "T",
-  ore: "P",
 };
 
 function project(x: number, y: number): [number, number] {
@@ -74,7 +65,7 @@ function coastlinePath(game: PlayerGameView): string {
     .sort((left, right) => Math.atan2(left.y, left.x) - Math.atan2(right.y, right.x))
     .map((vertex, index) => {
       const distance = Math.hypot(vertex.x, vertex.y) || 1;
-      const ripple = 0.2 + 0.055 * Math.sin(index * 2.4);
+      const ripple = 0.19 + 0.05 * Math.sin(index * 2.3) + 0.028 * Math.sin(index * 5.1);
       const x = vertex.x + (vertex.x / distance) * ripple;
       const y = vertex.y + (vertex.y / distance) * ripple;
       return project(x, y);
@@ -102,64 +93,158 @@ function probabilityPips(number: number): number {
   return 5;
 }
 
+function Pine({ x, y, s, alt = false }: { x: number; y: number; s: number; alt?: boolean }) {
+  const mid = alt ? "#3a8438" : "#3f8f3d";
+  const light = alt ? "#4e9c46" : "#57a94e";
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} strokeLinejoin="round">
+      <rect x="-2.6" y="-10" width="5.2" height="11" rx="1.2" fill="#6b4423" stroke="#4c2f16" strokeWidth="0.9" />
+      <path d="M0 -48 L12 -29 H-12 Z" fill={mid} stroke="#1f5a2a" strokeWidth="1.3" />
+      <path d="M0 -35 L17 -9 H-17 Z" fill={mid} stroke="#1f5a2a" strokeWidth="1.3" />
+      <path d="M0 -48 L6.5 -38 H-6.5 Z" fill={light} />
+      <path d="M0 -34 L9 -20 H-9 Z" fill={light} opacity="0.82" />
+    </g>
+  );
+}
+
+function Sheep({ x, y, s }: { x: number; y: number; s: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <ellipse cy="14" rx="20" ry="4.5" fill="#000000" opacity="0.12" />
+      <path
+        d="M-13 12 V3 M-4 12 V3 M5 12 V3 M12 11 V4"
+        stroke="#4a4f52"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      <ellipse cx="-2" cy="0" rx="17" ry="10.5" fill="#fdfbf1" stroke="#d4cdb6" strokeWidth="1.2" />
+      <circle cx="-13" cy="-5" r="6" fill="#fdfbf1" stroke="#d4cdb6" strokeWidth="1.1" />
+      <circle cx="-5" cy="-8" r="7" fill="#fdfbf1" stroke="#d4cdb6" strokeWidth="1.1" />
+      <circle cx="4" cy="-7.5" r="6.5" fill="#fdfbf1" stroke="#d4cdb6" strokeWidth="1.1" />
+      <circle cx="11" cy="-4" r="5.5" fill="#fdfbf1" stroke="#d4cdb6" strokeWidth="1.1" />
+      <path d="M16 -7 Q23 -10 26 -5.5 Q23 -1 17 -3.5 Z" fill="#3c4a50" />
+      <circle cx="23" cy="-6" r="0.9" fill="#fff" />
+      <path d="M14 -9 Q11 -13 15 -13" stroke="#3c4a50" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function WheatStalk({ x, s }: { x: number; s: number }) {
+  return (
+    <g transform={`translate(${x} 14) scale(${s})`}>
+      <path
+        d="M-1 -4 Q-10 -7 -11 -15 M1 -9 Q10 -12 11 -20"
+        stroke="#a8842a"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path d="M0 0 Q-2 -14 0 -28" stroke="#96700f" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      <ellipse cx="0" cy="-27" rx="4.4" ry="9.5" fill="#e3b93a" stroke="#8f6b12" strokeWidth="1.3" />
+      <path
+        d="M0 -36 V-46 M-2.6 -33 Q-8 -30 -8 -24 M2.6 -33 Q8 -30 8 -24 M-2.2 -40 Q-7 -37 -7 -31 M2.2 -40 Q7 -37 7 -31"
+        stroke="#b28c2e"
+        strokeWidth="1.5"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </g>
+  );
+}
+
 function TerrainIcon({ terrain, cx, cy }: { terrain: string; cx: number; cy: number }) {
-  const transform = `translate(${cx} ${cy - 30})`;
+  const transform = (scale: number, offsetY = -30) =>
+    `translate(${cx} ${cy + offsetY}) scale(${scale})`;
   switch (terrain) {
     case "wood":
       return (
-        <g transform={transform} stroke="#075f2d" strokeWidth="1.7" strokeLinejoin="round" pointerEvents="none">
-          <path d="M-14 14 -6 -1 2 14 H-3 V23 H-10 V14 Z" fill="#11823a" />
-          <path d="M9 10 16 -4 23 10 H19 V18 H13 V10 Z" fill="#087a34" />
-          <path d="M-25 17 Q-21 12 -17 17 M24 18 Q28 13 32 18" fill="none" stroke="#55a83b" />
-        </g>
-      );
-    case "sheep":
-      return (
-        <g transform={transform} stroke="#777a67" strokeWidth="1.5" strokeLinejoin="round" pointerEvents="none">
-          <ellipse cx="-2" cy="10" rx="18" ry="11" fill="#fffdf2" />
-          <circle cx="-14" cy="4" r="7" fill="#fffdf2" />
-          <circle cx="-5" cy="1" r="8" fill="#fffdf2" />
-          <circle cx="5" cy="2" r="8" fill="#fffdf2" />
-          <ellipse cx="14" cy="7" rx="7" ry="6" fill="#fffdf2" />
-          <path d="M17 3 22 0 21 7 M-10 19 V27 M1 20 V27 M11 18 V26" fill="none" stroke="#fffdf2" strokeWidth="2.5" />
-          <circle cx="17" cy="6" r="1" fill="#334638" stroke="none" />
-        </g>
-      );
-    case "wheat":
-      return (
-        <g transform={transform} fill="none" stroke="#9c7415" strokeWidth="1.8" strokeLinecap="round" pointerEvents="none">
-          <path d="M-12 25 Q-8 12 -10 -6 M0 25 Q3 10 2 -11 M12 25 Q16 13 15 -4" />
-          <path d="M-10 2 Q-19 0 -18 -7 Q-10 -7 -10 2 M-9 9 Q-18 8 -18 2 Q-11 1 -9 9 M2 0 Q-7 -2 -7 -9 Q1 -8 2 0 M2 8 Q10 5 10 -2 Q3 0 2 8 M15 4 Q8 1 9 -6 Q16 -5 15 4 M14 12 Q22 9 22 3 Q15 4 14 12" />
-          <path d="M-25 19 Q-20 14 -16 19 M22 19 Q26 14 30 18" stroke="#b9a143" />
+        <g transform={transform(1.16)} pointerEvents="none">
+          <ellipse cy="10" rx="40" ry="7" fill="#000000" opacity="0.12" />
+          <Pine x={-20} y={6} s={0.68} alt />
+          <Pine x={20} y={8} s={0.6} />
+          <Pine x={0} y={3} s={0.98} />
         </g>
       );
     case "brick":
       return (
-        <g transform={transform} stroke="#9d3828" strokeWidth="1.3" pointerEvents="none">
-          <g fill="#f4c6a1">
-            <rect x="-17" y="-2" width="15" height="8" rx="1" />
-            <rect x="2" y="-2" width="15" height="8" rx="1" />
-            <rect x="-25" y="9" width="15" height="8" rx="1" />
-            <rect x="-6" y="9" width="15" height="8" rx="1" />
-            <rect x="13" y="9" width="15" height="8" rx="1" />
+        <g transform={transform(1.14)} pointerEvents="none">
+          <ellipse cy="12" rx="40" ry="6" fill="#000000" opacity="0.12" />
+          <path
+            d="M-40 13 C-34 -14 -12 -27 0 -9 C7 -1 2 13 -6 13 Z"
+            fill="#d1743f"
+            stroke="#a04a22"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path d="M-36 9 C-30 -8 -16 -17 -5 -7" stroke="#eb9a64" strokeWidth="2.6" fill="none" opacity="0.85" strokeLinecap="round" />
+          <path
+            d="M-6 13 C2 -19 25 -25 37 -5 C43 5 40 13 33 13 Z"
+            fill="#c25c2c"
+            stroke="#94451f"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path d="M-1 9 C6 -9 20 -15 29 -3" stroke="#dd8a55" strokeWidth="2.4" fill="none" opacity="0.8" strokeLinecap="round" />
+          <g stroke="#8f3d1c" strokeWidth="1">
+            <rect x="-27" y="4" width="14" height="7" rx="1.5" fill="#e8b183" />
+            <rect x="-11" y="6" width="14" height="7" rx="1.5" fill="#f0bd94" />
+            <rect x="6" y="5" width="14" height="7" rx="1.5" fill="#e8b183" />
           </g>
-          <path d="M-28 20 Q-23 16 -19 21 M24 21 Q29 17 33 22" fill="none" stroke="#d78056" />
+        </g>
+      );
+    case "sheep":
+      return (
+        <g transform={transform(1.2)} pointerEvents="none">
+          <ellipse cy="13" rx="40" ry="6.5" fill="#000000" opacity="0.1" />
+          <g stroke="#4f8d3c" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
+            <path d="M-34 11 q2 -6 0 -10 M-29 12 q1 -5 3 -7" />
+            <path d="M30 8 q2 -6 0 -10 M35 9 q1 -5 3 -7" />
+            <path d="M-24 14 q2 -5 0 -8" />
+          </g>
+          <Sheep x={18} y={6} s={0.6} />
+          <Sheep x={-6} y={1} s={1} />
+        </g>
+      );
+    case "wheat":
+      return (
+        <g transform={transform(1.12, -24)} pointerEvents="none">
+          <path
+            d="M-42 12 Q-20 5 0 12 T42 12 M-40 17 Q-18 10 2 17 T42 17"
+            stroke="#b8932e"
+            strokeWidth="2"
+            fill="none"
+            opacity="0.5"
+          />
+          <WheatStalk x={-19} s={1} />
+          <WheatStalk x={0} s={1.16} />
+          <WheatStalk x={19} s={0.98} />
+          <WheatStalk x={-33} s={0.78} />
+          <WheatStalk x={33} s={0.76} />
         </g>
       );
     case "ore":
       return (
-        <g transform={transform} stroke="#68737a" strokeWidth="1.5" strokeLinejoin="round" pointerEvents="none">
-          <path d="M-24 16 -19 6 -10 3 -4 9 -6 18 -17 21 Z" fill="#d6d9d7" />
-          <path d="M-10 13 -4 1 7 -2 16 5 14 17 4 22 -5 19 Z" fill="#f0eee5" />
-          <path d="M8 17 13 7 22 5 29 12 25 21 15 23 Z" fill="#c9d0d1" />
-          <path d="M-17 9 -10 13 M1 2 5 10 14 5 M16 11 22 14" fill="none" stroke="#fffdf2" />
+        <g transform={transform(1.12)} pointerEvents="none">
+          <ellipse cy="13" rx="40" ry="6" fill="#000000" opacity="0.14" />
+          <path d="M-38 13 L-17 -25 L-2 5 L3 13 Z" fill="#93a0ab" stroke="#5f6b76" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M-17 -25 L-10 -12 L-14 -11 L-17 -16 L-21 -11 L-24 -12 Z" fill="#fbfdff" opacity="0.92" />
+          <path d="M-6 13 L11 -35 L30 13 Z" fill="#b6c0c8" stroke="#62707c" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M11 -35 L18 -21 L14 -19 L11 -25 L7 -19 L4 -21 Z" fill="#fbfdff" opacity="0.95" />
+          <path d="M11 -35 L11 13 L-6 13 Z" fill="#7c8894" opacity="0.32" />
+          <path d="M29 13 L36 -2 L40 8 V13 Z" fill="#a5b0b9" stroke="#5f6b76" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M-38 13 L-32 4 L-28 13 Z" fill="#a5b0b9" stroke="#5f6b76" strokeWidth="1.2" strokeLinejoin="round" />
         </g>
       );
     case "desert":
       return (
-        <g transform={transform} fill="none" stroke="#54743b" strokeWidth="3.4" strokeLinecap="round" pointerEvents="none">
-          <path d="M0 25 V-15 Q0 -21 5 -21 Q10 -21 10 -15 V-7 M0 1 H-8 Q-12 1 -12 -4 V-9 M10 4 H17 Q21 4 21 -1 V-6" />
-          <path d="M-28 18 Q-23 14 -19 18 M23 19 Q28 14 32 19" stroke="#b19865" strokeWidth="1.5" />
+        <g transform={transform(1.14, -26)} pointerEvents="none">
+          <path d="M-42 14 C-32 -3 -14 -6 -2 8 C6 14 2 14 -6 14 Z" fill="#e7d29b" />
+          <path d="M-4 14 C9 -4 29 -7 42 5 V14 Z" fill="#dcc584" />
+          <path d="M-36 9 C-27 0 -17 0 -10 7" stroke="#f0dfae" strokeWidth="2.6" fill="none" strokeLinecap="round" opacity="0.9" />
+          <path d="M8 5 C17 -1 28 -1 35 5" stroke="#ecd7a2" strokeWidth="2.4" fill="none" strokeLinecap="round" opacity="0.8" />
+          <ellipse cx="28" cy="11" rx="8" ry="3.8" fill="#cdb47c" />
+          <ellipse cx="18" cy="13" rx="5" ry="2.6" fill="#d8c28c" />
+          <ellipse cx="-30" cy="12" rx="5.5" ry="2.8" fill="#cdb47c" />
         </g>
       );
     default:
@@ -247,49 +332,101 @@ export default function BoardSvg({
       >
         <defs>
           <linearGradient id="sea-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#3f9ecb" />
-            <stop offset="0.55" stopColor="#328dc0" />
-            <stop offset="1" stopColor="#2879a8" />
+            <stop offset="0" stopColor="#46a4d1" />
+            <stop offset="0.5" stopColor="#328dc0" />
+            <stop offset="1" stopColor="#266f9d" />
           </linearGradient>
+          <radialGradient id="sea-vignette" cx="0.5" cy="0.5" r="0.72">
+            <stop offset="0.55" stopColor="#062c47" stopOpacity="0" />
+            <stop offset="1" stopColor="#062c47" stopOpacity="0.34" />
+          </radialGradient>
+          <pattern id="sea-waves" width="130" height="64" patternUnits="userSpaceOnUse">
+            <path
+              d="M0 26 Q16 17 32 26 T64 26 T96 26 T128 26"
+              fill="none"
+              stroke="#ffffff"
+              strokeOpacity="0.09"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M-16 56 Q0 47 16 56 T48 56 T80 56 T112 56"
+              fill="none"
+              stroke="#0b3a5c"
+              strokeOpacity="0.09"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+            />
+          </pattern>
           <linearGradient id="terrain-wood" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#4f9a43" />
-            <stop offset="1" stopColor="#3b7d33" />
+            <stop offset="0" stopColor="#5aa74c" />
+            <stop offset="1" stopColor="#3f7f36" />
           </linearGradient>
           <linearGradient id="terrain-brick" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#d1743f" />
-            <stop offset="1" stopColor="#b85a2c" />
+            <stop offset="0" stopColor="#db8250" />
+            <stop offset="1" stopColor="#bc5f2d" />
           </linearGradient>
           <linearGradient id="terrain-sheep" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#b6d96c" />
-            <stop offset="1" stopColor="#93c04a" />
+            <stop offset="0" stopColor="#c3e07a" />
+            <stop offset="1" stopColor="#9ac74f" />
           </linearGradient>
           <linearGradient id="terrain-wheat" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#f4d766" />
-            <stop offset="1" stopColor="#e0bd3f" />
+            <stop offset="0" stopColor="#f7dc72" />
+            <stop offset="1" stopColor="#e2c043" />
           </linearGradient>
           <linearGradient id="terrain-ore" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#aab4bd" />
-            <stop offset="1" stopColor="#8b97a3" />
+            <stop offset="0" stopColor="#b4bec6" />
+            <stop offset="1" stopColor="#94a0ab" />
           </linearGradient>
           <linearGradient id="terrain-desert" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#ecd9a4" />
-            <stop offset="1" stopColor="#dcc584" />
+            <stop offset="0" stopColor="#f0deac" />
+            <stop offset="1" stopColor="#dfc98c" />
           </linearGradient>
           <filter id="tile-shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="1.4" floodColor="#533f22" floodOpacity="0.24" />
+            <feDropShadow dx="0" dy="2.5" stdDeviation="2" floodColor="#533f22" floodOpacity="0.28" />
           </filter>
-          <filter id="coast-glow" x="-10%" y="-10%" width="120%" height="120%">
-            <feGaussianBlur stdDeviation="3" />
+          <filter id="island-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="8" stdDeviation="7" floodColor="#062c47" floodOpacity="0.42" />
+          </filter>
+          <filter id="token-shadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="2.5" stdDeviation="1.8" floodColor="#3a2c14" floodOpacity="0.35" />
+          </filter>
+          <filter id="pawn-shadow" x="-60%" y="-60%" width="220%" height="220%">
+            <feDropShadow dx="0" dy="4" stdDeviation="3" floodColor="#04182a" floodOpacity="0.45" />
+          </filter>
+          <filter id="robber-tone" x="-20%" y="-20%" width="140%" height="140%">
+            <feColorMatrix
+              type="matrix"
+              values="0.34 0 0 0 0  0 0.34 0 0 0  0 0 0.36 0 0  0 0 0 1 0"
+            />
           </filter>
         </defs>
 
         <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-gradient)" />
+        <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-waves)" />
+        <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-vignette)" />
+
         {coastPath && (
           <>
-            <path d={coastPath} fill="none" stroke="#bfe4f2" strokeWidth="34" opacity="0.35" filter="url(#coast-glow)" />
-            <path d={coastPath} fill="#ecd9a4" stroke="#dcc584" strokeWidth="22" strokeLinejoin="round" />
-            <path d={coastPath} fill="none" stroke="#f7efd6" strokeWidth="10" strokeLinejoin="round" opacity="0.85" />
-            <path d={coastPath} fill="none" stroke="#bfe4f2" strokeWidth="3" strokeDasharray="3 14" strokeLinecap="round" opacity="0.8" />
+            <path d={coastPath} fill="#d9c08c" filter="url(#island-shadow)" />
+            <path d={coastPath} fill="#e6d19b" stroke="#c9ad78" strokeWidth="1.5" strokeLinejoin="round" />
+            <path
+              d={coastPath}
+              fill="none"
+              stroke="#f4e6c2"
+              strokeWidth="14"
+              strokeLinejoin="round"
+              opacity="0.75"
+            />
+            <path
+              d={coastPath}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="3"
+              strokeDasharray="2 12"
+              strokeLinecap="round"
+              opacity="0.75"
+            />
           </>
         )}
 
@@ -298,55 +435,94 @@ export default function BoardSvg({
           const [cx, cy] = project(centerX, centerY);
           const isRobberTarget = activeMode === "robber" && isMyTurn && robberTargets.has(hex.id);
           const pips = hex.number === null ? 0 : probabilityPips(hex.number);
-          const pipColor = hex.number === 6 || hex.number === 8 ? "#d51f20" : "#174b27";
+          const pipColor = hex.number === 6 || hex.number === 8 ? "#c92a2a" : "#1f4d2b";
+          const tileFile = TILE_FILES[hex.terrain];
+          const hexWidth = Math.sqrt(3) * SCALE;
+          const hexHeight = 2 * SCALE;
           return (
             <g key={hex.id}>
               <polygon
                 points={pointsForHex(hex.q, hex.r)}
                 fill={TERRAIN_FILL[hex.terrain]}
-                stroke={TERRAIN_BORDER[hex.terrain]}
-                strokeWidth="6"
-                strokeLinejoin="round"
+                stroke="none"
                 filter="url(#tile-shadow)"
                 className={isRobberTarget ? "cursor-pointer transition hover:brightness-110" : ""}
                 onClick={isRobberTarget ? () => onHexClick(hex.id) : undefined}
               />
-              <polygon
-                points={pointsForHex(hex.q, hex.r, 0.89)}
-                fill="none"
-                stroke="#fff6d8"
-                strokeOpacity="0.55"
-                strokeWidth="1.2"
+              {!tileFile && (
+                <>
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.93)}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeOpacity="0.28"
+                    strokeWidth="2"
+                    pointerEvents="none"
+                  />
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.9)}
+                    fill="none"
+                    stroke="#3b2c14"
+                    strokeOpacity="0.12"
+                    strokeWidth="1.2"
+                    pointerEvents="none"
+                  />
+                </>
+              )}
+              <image
+                href={tileFile ?? TILE_FRAME_FILE}
+                x={cx - hexWidth / 2}
+                y={cy - hexHeight / 2}
+                width={hexWidth}
+                height={hexHeight}
                 pointerEvents="none"
               />
-              {hex.terrain !== "desert" && <TerrainIcon terrain={hex.terrain} cx={cx} cy={cy} />}
-              {hex.terrain === "desert" && <TerrainIcon terrain="desert" cx={cx} cy={cy} />}
+              {!tileFile && <TerrainIcon terrain={hex.terrain} cx={cx} cy={cy} />}
               {hex.number !== null && (
-                <g pointerEvents="none">
-                  <circle cx={cx} cy={cy + 10} r="26" fill="#f8f1dd" stroke="#cbbd9a" strokeWidth="2" />
+                <g pointerEvents="none" filter="url(#token-shadow)">
+                  <circle cx={cx} cy={cy + 13} r="24" fill="#ddcda6" />
+                  <circle cx={cx} cy={cy + 13} r="20.8" fill="#fdf8ea" stroke="#c7b48a" strokeWidth="1.4" />
                   <text
                     x={cx}
-                    y={cy + 20}
+                    y={cy + 21.5}
                     textAnchor="middle"
                     fontFamily="Georgia, 'Times New Roman', serif"
-                    fontSize="26"
+                    fontSize="23"
                     fontWeight="900"
                     fill={pipColor}
                   >
                     {hex.number}
                   </text>
                   {Array.from({ length: pips }, (_, index) => {
-                    const spacing = 6;
+                    const spacing = 5.5;
                     const x = cx - ((pips - 1) * spacing) / 2 + index * spacing;
-                    return <circle key={index} cx={x} cy={cy + 29} r="1.7" fill={pipColor} />;
+                    return <circle key={index} cx={x} cy={cy + 29.5} r="1.6" fill={pipColor} />;
                   })}
                 </g>
               )}
+              {isRobberTarget && (
+                <g pointerEvents="none">
+                  <polygon points={pointsForHex(hex.q, hex.r, 0.92)} fill="#e5484d" fillOpacity="0.16" />
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.92)}
+                    fill="none"
+                    stroke="#ffe08a"
+                    strokeWidth="2.6"
+                    strokeDasharray="8 6"
+                    className="animate-pulse"
+                  />
+                </g>
+              )}
               {hex.id === game.robberHexId && (
-                <g transform={`translate(${cx + 23} ${cy - 25})`} pointerEvents="none">
-                  <circle r="9" fill="#233128" stroke="#f4ebd7" strokeWidth="1.5" />
-                  <circle cy="-2" r="2.5" fill="#f4ebd7" />
-                  <path d="M-4 5 Q0 1 4 5" fill="none" stroke="#f4ebd7" strokeWidth="1.5" strokeLinecap="round" />
+                <g filter="url(#pawn-shadow)" pointerEvents="none">
+                  <image
+                    href={ROBBER_ICON_FILE}
+                    x={cx - 21}
+                    y={cy - 26}
+                    width="44"
+                    height="44"
+                    filter="url(#robber-tone)"
+                  />
                 </g>
               )}
             </g>
@@ -360,20 +536,27 @@ export default function BoardSvg({
           const midpointX = (first.x + second.x) / 2;
           const midpointY = (first.y + second.y) / 2;
           const distance = Math.hypot(midpointX, midpointY) || 1;
-          const [x, y] = project(
-            midpointX + (midpointX / distance) * 0.28,
-            midpointY + (midpointY / distance) * 0.28,
-          );
-          const label =
-            port.type === "generic"
-              ? "3:1"
-              : `2:1 ${RESOURCE_LABEL[port.type]}`;
+          const ux = midpointX / distance;
+          const uy = midpointY / distance;
+          const rotation = (Math.atan2(uy, ux) * 180) / Math.PI + 90;
+          const [iconX, iconY] = project(midpointX + ux * 0.52, midpointY + uy * 0.52);
+          const iconFile =
+            port.type === "generic" ? GENERIC_PORT_FILE : RESOURCE_PORT_FILES[port.type];
+          const size = 56;
           return (
-            <g key={port.id} pointerEvents="none">
-              <rect x={x - 23} y={y - 10} width="46" height="20" rx="8" fill="#f2e8d0" stroke="#9f865c" />
-              <text x={x} y={y + 4} textAnchor="middle" className="fill-[#493b29] text-[10px] font-bold">
-                {label}
-              </text>
+            <g
+              key={port.id}
+              pointerEvents="none"
+              transform={`rotate(${rotation} ${iconX} ${iconY})`}
+              filter="url(#token-shadow)"
+            >
+              <image
+                href={iconFile}
+                x={iconX - size / 2}
+                y={iconY - size / 2}
+                width={size}
+                height={size}
+              />
             </g>
           );
         })}
@@ -395,57 +578,58 @@ export default function BoardSvg({
                 : activeMode === "free-road"
                   ? canPlaceFreeRoad(edge.id)
                   : false));
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2;
+          const roadLength = SCALE * 1.04;
+          const roadWidth = roadLength * (40 / 194);
+          const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
           return (
             <g key={edge.id}>
               {owner && (
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="#f3e6bf"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  pointerEvents="none"
-                />
-              )}
-              {owner && (
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={owner.color}
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                  pointerEvents="none"
-                />
+                <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
+                  <image
+                    href={pieceFile("road", owner.color)}
+                    x={midX - roadWidth / 2}
+                    y={midY - roadLength / 2}
+                    width={roadWidth}
+                    height={roadLength}
+                  />
+                </g>
               )}
               {isBuildable && (
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={isSelected ? "#f5d35f" : "#d8eb9b"}
-                  strokeWidth={isSelected ? 8 : 5}
-                  strokeDasharray={isSelected ? undefined : "5 6"}
-                  strokeLinecap="round"
-                  className="cursor-pointer"
+                <g
+                  className="cursor-pointer transition hover:brightness-110"
                   onClick={() => onEdgeClick(edge.id)}
-                />
-              )}
-              {isBuildable && (
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="transparent"
-                  strokeWidth="20"
-                  className="cursor-pointer"
-                  onClick={() => onEdgeClick(edge.id)}
-                />
+                >
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={isSelected ? "#f5d35f" : "#ffffff"}
+                    strokeOpacity={isSelected ? 0.55 : 0.3}
+                    strokeWidth="17"
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={isSelected ? "#f5d35f" : "#f3c93f"}
+                    strokeWidth={isSelected ? 9 : 6.5}
+                    strokeDasharray={isSelected ? undefined : "7 7"}
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="transparent"
+                    strokeWidth="22"
+                  />
+                </g>
               )}
             </g>
           );
@@ -461,25 +645,60 @@ export default function BoardSvg({
             <g key={vertex.id}>
               {owner && (
                 <g pointerEvents="none">
-                  {isCity ? (
-                    <>
-                      <path d={`M${cx - 13} ${cy - 1}  ${cx - 4} ${cy - 9} ${cx + 4} ${cy - 1} V${cy + 8} H${cx - 13} Z`} fill={owner.color} stroke="#fff8e7" strokeWidth="1.7" strokeLinejoin="round" />
-                      <path d={`M${cx + 1} ${cy - 2} ${cx + 9} ${cy - 10} ${cx + 16} ${cy - 2} V${cy + 8} H${cx + 1} Z`} fill={owner.color} stroke="#fff8e7" strokeWidth="1.7" strokeLinejoin="round" />
-                      <path d={`M${cx + 6} ${cy - 10} V${cy - 15} H${cx + 11} V${cy - 8}`} fill={owner.color} stroke="#fff8e7" strokeWidth="1.5" strokeLinejoin="round" />
-                    </>
-                  ) : (
-                    <path d={`M${cx - 10} ${cy - 1} ${cx} ${cy - 10} ${cx + 10} ${cy - 1} V${cy + 8} H${cx - 10} Z`} fill={owner.color} stroke="#fff8e7" strokeWidth="1.8" strokeLinejoin="round" />
-                  )}
+                  <ellipse
+                    cx={cx}
+                    cy={cy + 10}
+                    rx={isCity ? 17 : 11}
+                    ry={isCity ? 4.4 : 3.2}
+                    fill="#04182a"
+                    opacity="0.25"
+                  />
+                  <image
+                    href={pieceFile(isCity ? "city" : "settlement", owner.color)}
+                    x={cx - (isCity ? 26 : 19)}
+                    y={cy - (isCity ? 33 : 25)}
+                    width={isCity ? 52 : 38}
+                    height={isCity ? 52 : 38}
+                  />
                 </g>
               )}
               {isBuildable && isMyTurn && (
                 <g
-                  className="cursor-pointer"
+                  className="cursor-pointer transition hover:brightness-105"
                   onClick={() => onVertexClick(vertex.id)}
                   aria-label={activeMode === "city" ? "Mejorar a ciudad" : "Construir poblado"}
                 >
-                  <circle cx={cx} cy={cy} r="13" fill="#d9eea7" fillOpacity="0.55" stroke="#fff8e5" strokeWidth="2" />
-                  <circle cx={cx} cy={cy} r="20" fill="transparent" />
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r="18"
+                    fill="none"
+                    stroke="#ffe08a"
+                    strokeWidth="2.6"
+                    strokeDasharray="5 5"
+                    className="animate-pulse"
+                  />
+                  {activeMode === "settlement" ? (
+                    <g>
+                      <path
+                        d={`M${cx - 8} ${cy + 7} V${cy - 1} H${cx + 8} V${cy + 7} Z`}
+                        fill="#ffffff"
+                        stroke="#6d5c33"
+                        strokeWidth="1.4"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d={`M${cx - 10.5} ${cy - 1} L${cx} ${cy - 10.5} L${cx + 10.5} ${cy - 1} Z`}
+                        fill="#e6d7ab"
+                        stroke="#6d5c33"
+                        strokeWidth="1.4"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                  ) : (
+                    <circle cx={cx} cy={cy} r="11" fill="#fff3c4" fillOpacity="0.6" stroke="#ffffff" strokeWidth="1.6" />
+                  )}
+                  <circle cx={cx} cy={cy} r="22" fill="transparent" />
                 </g>
               )}
             </g>

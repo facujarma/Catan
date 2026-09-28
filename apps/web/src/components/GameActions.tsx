@@ -4,14 +4,16 @@ import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
+import { bundleTotal, emptyBundle, RESOURCE_NAMES, ResourceCard } from "./TradePanels";
 import {
-  bundleTotal,
-  emptyBundle,
-  RESOURCE_CARD_TONES,
-  RESOURCE_NAMES,
-  RESOURCE_SYMBOLS,
-  ResourceCard,
-} from "./TradePanels";
+  BANK_FILE,
+  DEV_CARD_BACK_FILE,
+  DEV_CARD_FILES,
+  pieceFile,
+  RESOURCE_CARD_FILES,
+  RESOURCE_PORT_FILES,
+  TRADE_ICON_FILE,
+} from "../assets";
 import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 
 interface GameActionsProps {
@@ -128,6 +130,7 @@ export default function GameActions({
   const roadsLeft = 15 - (selfPlayer?.roadsBuilt ?? 0);
   const settlementsLeft = 5 - (selfPlayer?.settlementsBuilt ?? 0);
   const citiesLeft = 4 - (selfPlayer?.citiesBuilt ?? 0);
+  const selfColor = selfPlayer?.color ?? "#e2b83f";
 
   const actionIcon = "text-lg leading-none";
   const actionLabel = "text-[10px] font-extrabold";
@@ -168,7 +171,13 @@ export default function GameActions({
                         : "border-line bg-[#f4ecda]"
                     } ${playable ? "ring-1 ring-catan-green/50" : ""}`}
                   >
-                    {CARD_NAMES[card.type]}
+                    <img
+                      className="h-[34px] w-auto drop-shadow-[0_2px_2px_rgba(0,0,0,0.25)]"
+                      src={DEV_CARD_FILES[card.type]}
+                      alt={CARD_NAMES[card.type]}
+                      title={CARD_NAMES[card.type]}
+                      draggable={false}
+                    />
                     {card.type === "victory-point" ? (
                       <small>+1 PV</small>
                     ) : card.boughtOnTurn >= game.turnNumber ? (
@@ -249,7 +258,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn}
             onClick={onOpenTrade}
           >
-            <span className={actionIcon}>⇄</span>
+            <img className="h-[22px] w-auto" src={TRADE_ICON_FILE} alt="" draggable={false} />
             <span className={actionLabel}>Comercio</span>
           </button>
           <button
@@ -258,7 +267,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn}
             onClick={() => void onAction({ type: "buy-development-card" })}
           >
-            <span className={actionIcon}>🃏</span>
+            <img className="h-[30px] w-auto" src={DEV_CARD_BACK_FILE} alt="" draggable={false} />
             <span className={actionLabel}>Desarrollo</span>
             <span className={actionCost}>🐑🌾⛰️</span>
           </button>
@@ -268,7 +277,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn || room.legal.roadIds.length === 0}
             onClick={() => toggleMode("road")}
           >
-            <span className={actionIcon}>🛤️</span>
+            <img className="h-[30px] w-auto" src={pieceFile("road", selfColor)} alt="" draggable={false} />
             <span className={actionLabel}>Camino</span>
             <span className={actionCost}>🌲🧱</span>
             <span className={actionCount}>{roadsLeft}</span>
@@ -279,7 +288,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn || room.legal.settlementVertexIds.length === 0}
             onClick={() => toggleMode("settlement")}
           >
-            <span className={actionIcon}>🏠</span>
+            <img className="h-[26px] w-auto" src={pieceFile("settlement", selfColor)} alt="" draggable={false} />
             <span className={actionLabel}>Poblado</span>
             <span className={actionCost}>🌲🧱🐑🌾</span>
             <span className={actionCount}>{settlementsLeft}</span>
@@ -290,7 +299,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn || room.legal.cityVertexIds.length === 0}
             onClick={() => toggleMode("city")}
           >
-            <span className={actionIcon}>🏰</span>
+            <img className="h-[26px] w-auto" src={pieceFile("city", selfColor)} alt="" draggable={false} />
             <span className={actionLabel}>Ciudad</span>
             <span className={actionCost}>🌾🌾⛰️⛰️⛰️</span>
             <span className={actionCount}>{citiesLeft}</span>
@@ -301,7 +310,7 @@ export default function GameActions({
             disabled={busy || !isMainTurn}
             onClick={() => setMaritimeOpen(true)}
           >
-            <span className={actionIcon}>⚓</span>
+            <img className="h-[26px] w-auto" src={BANK_FILE} alt="" draggable={false} />
             <span className={actionLabel}>Banco</span>
             <span className={actionCost}>{room.legal.tradeRatios[giveResource]}:1</span>
           </button>
@@ -337,8 +346,14 @@ export default function GameActions({
                   key={resource}
                   className="mt-1.5 flex items-center justify-between gap-2 text-xs"
                 >
-                  <span>
-                    {RESOURCE_SYMBOLS[resource]} {RESOURCE_NAMES[resource]}{" "}
+                  <span className="flex items-center gap-2">
+                    <img
+                      className="h-9 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                      src={RESOURCE_CARD_FILES[resource]}
+                      alt=""
+                      draggable={false}
+                    />
+                    {RESOURCE_NAMES[resource]}{" "}
                     <small>({game.self.resources[resource]})</small>
                   </span>
                   <input
@@ -419,20 +434,25 @@ export default function GameActions({
                   <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
                     Entregás
                   </span>
-                  <div className="flex flex-wrap gap-[7px]">
+                  <div className="flex flex-wrap gap-1.5">
                     {RESOURCES.map((resource) => (
                       <button
                         key={resource}
                         type="button"
-                        className={`relative inline-flex h-[34px] w-[42px] items-center justify-center rounded-[7px] border border-black/[0.28] text-[15px] text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-[4px] transition ${
                           giveResource === resource
                             ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
-                            : ""
+                            : "hover:-translate-y-0.5"
                         }`}
                         title={RESOURCE_NAMES[resource]}
                         onClick={() => setGiveResource(resource)}
                       >
-                        {RESOURCE_SYMBOLS[resource]}
+                        <img
+                          className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                          src={RESOURCE_CARD_FILES[resource]}
+                          alt={RESOURCE_NAMES[resource]}
+                          draggable={false}
+                        />
                       </button>
                     ))}
                   </div>
@@ -443,30 +463,43 @@ export default function GameActions({
                     value={giveAmount}
                     onChange={(event) => setGiveAmount(event.target.value)}
                   />
-                  <small className="text-[10px] text-[#9a9384]">
-                    Tasa {room.legal.tradeRatios[giveResource]}:1 para{" "}
-                    {RESOURCE_NAMES[giveResource]}
-                  </small>
+                  <div className="flex items-center gap-2">
+                    <img
+                      className="h-11 w-auto"
+                      src={RESOURCE_PORT_FILES[giveResource]}
+                      alt=""
+                      draggable={false}
+                    />
+                    <small className="text-[10px] text-[#9a9384]">
+                      Tasa {room.legal.tradeRatios[giveResource]}:1 para{" "}
+                      {RESOURCE_NAMES[giveResource]}
+                    </small>
+                  </div>
                 </div>
                 <div className="text-center text-xl font-black text-[#a59a82]">⇄</div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
                     Recibís
                   </span>
-                  <div className="flex flex-wrap gap-[7px]">
+                  <div className="flex flex-wrap gap-1.5">
                     {RESOURCES.filter((resource) => resource !== giveResource).map((resource) => (
                       <button
                         key={resource}
                         type="button"
-                        className={`relative inline-flex h-[34px] w-[42px] items-center justify-center rounded-[7px] border border-black/[0.28] text-[15px] text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-[4px] transition ${
                           wantResource === resource
                             ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
-                            : ""
+                            : "hover:-translate-y-0.5"
                         }`}
                         title={RESOURCE_NAMES[resource]}
                         onClick={() => setWantResource(resource)}
                       >
-                        {RESOURCE_SYMBOLS[resource]}
+                        <img
+                          className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                          src={RESOURCE_CARD_FILES[resource]}
+                          alt={RESOURCE_NAMES[resource]}
+                          draggable={false}
+                        />
                       </button>
                     ))}
                   </div>

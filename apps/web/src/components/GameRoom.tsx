@@ -4,13 +4,8 @@ import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/eng
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
-import {
-  RESOURCE_CARD_TONES,
-  RESOURCE_NAMES,
-  RESOURCE_SYMBOLS,
-  TradeComposer,
-  TradeOfferPanel,
-} from "./TradePanels";
+import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
+import { BANK_FILE, RESOURCE_CARD_FILES } from "../assets";
 import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "../model";
 
@@ -347,18 +342,28 @@ export default function GameRoom({
             aria-label="Banco"
           >
             <div className="mb-1.5 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-soft">
-              <span>Banco</span>
+              <span className="flex items-center gap-1.5">
+                <img className="h-5 w-auto" src={BANK_FILE} alt="" draggable={false} />
+                Banco
+              </span>
               <span>Cartas restantes</span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1">
               {RESOURCES.map((resource) => (
                 <div
-                  className="flex flex-1 flex-col items-center gap-0.5 rounded-lg bg-[#f2ead7] px-0.5 py-[5px]"
+                  className="relative flex flex-1 items-center justify-center"
                   key={resource}
                   title={RESOURCE_NAMES[resource]}
                 >
-                  <span className="text-sm">{RESOURCE_SYMBOLS[resource]}</span>
-                  <b className="text-[11px]">{game.bank[resource]}</b>
+                  <img
+                    className="h-[42px] w-auto drop-shadow-[0_2px_3px_rgba(0,0,0,0.25)]"
+                    src={RESOURCE_CARD_FILES[resource]}
+                    alt={RESOURCE_NAMES[resource]}
+                    draggable={false}
+                  />
+                  <span className="absolute -bottom-1 right-0 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[10px] font-black text-white">
+                    {game.bank[resource]}
+                  </span>
                 </div>
               ))}
             </div>
@@ -414,17 +419,22 @@ export default function GameRoom({
             <p className={MODAL_NOTE}>
               Elegí un recurso. Todos los demás jugadores te entregarán las cartas de ese tipo que tengan.
             </p>
-            <div className="mt-4 flex flex-wrap gap-[7px]">
+            <div className="mt-4 flex flex-wrap gap-2">
               {RESOURCES.map((resource) => (
                 <button
                   key={resource}
                   type="button"
-                  className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} outline outline-[3px] outline-offset-1 outline-catan-gold disabled:opacity-50`}
+                  className="relative inline-flex h-[60px] w-[43px] items-center justify-center rounded-[4px] transition outline outline-[3px] outline-offset-1 outline-catan-gold enabled:hover:-translate-y-0.5 disabled:opacity-50"
                   title={RESOURCE_NAMES[resource]}
                   disabled={busy}
                   onClick={() => playMonopoly(resource)}
                 >
-                  {RESOURCE_SYMBOLS[resource]}
+                  <img
+                    className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                    src={RESOURCE_CARD_FILES[resource]}
+                    alt={RESOURCE_NAMES[resource]}
+                    draggable={false}
+                  />
                 </button>
               ))}
             </div>
@@ -450,23 +460,30 @@ export default function GameRoom({
               Elegí {requiredPlentyCards} recurso{requiredPlentyCards === 1 ? "" : "s"} del banco.
               Seleccionados: {plentyResources.length}/{requiredPlentyCards}.
             </p>
-            <div className="mt-4 flex flex-wrap gap-[7px]">
+            <div className="mt-4 flex flex-wrap gap-2">
               {RESOURCES.map((resource) => {
                 const selectedCount = plentyResources.filter((candidate) => candidate === resource).length;
                 return (
                   <button
                     key={resource}
                     type="button"
-                    className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
-                      selectedCount > 0 ? "outline outline-[3px] outline-offset-1 outline-catan-gold" : ""
-                    } disabled:opacity-50`}
+                    className={`relative inline-flex h-[60px] w-[43px] items-center justify-center rounded-[4px] transition disabled:opacity-50 ${
+                      selectedCount > 0
+                        ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                        : "enabled:hover:-translate-y-0.5"
+                    }`}
                     title={`Banco: ${game.bank[resource]}`}
                     disabled={busy || game.bank[resource] === 0}
                     onClick={() => togglePlentyResource(resource)}
                   >
-                    {RESOURCE_SYMBOLS[resource]}
+                    <img
+                      className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                      src={RESOURCE_CARD_FILES[resource]}
+                      alt={RESOURCE_NAMES[resource]}
+                      draggable={false}
+                    />
                     {selectedCount > 0 && (
-                      <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+                      <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white">
                         {selectedCount}
                       </span>
                     )}

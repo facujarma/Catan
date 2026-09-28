@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { PlayerGameView, Resource, ResourceBundle, TradeOffer } from "@catan/engine";
+import { RESOURCE_CARD_FILES } from "../assets";
 import type { GameActionPayload } from "../model";
 import {
   CG_BUTTON_ACCEPT,
@@ -11,28 +12,12 @@ import {
   MODAL_BACKDROP,
 } from "../ui";
 
-export const RESOURCE_SYMBOLS: Record<Resource, string> = {
-  wood: "🌲",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
-
 export const RESOURCE_NAMES: Record<Resource, string> = {
   wood: "Madera",
   brick: "Ladrillo",
   sheep: "Oveja",
   wheat: "Trigo",
   ore: "Mineral",
-};
-
-export const RESOURCE_CARD_TONES: Record<Resource, string> = {
-  wood: "bg-wood",
-  brick: "bg-brick",
-  sheep: "bg-sheep",
-  wheat: "bg-wheat text-[#6d520a] [text-shadow:none]",
-  ore: "bg-ore",
 };
 
 export function emptyBundle(): ResourceBundle {
@@ -65,14 +50,19 @@ export function ResourceCard({
 }) {
   return (
     <span
-      className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
-        small ? "h-[34px] w-[42px] text-[15px]" : ""
+      className={`relative inline-flex shrink-0 items-center justify-center ${
+        small ? "h-[46px] w-[33px]" : "h-[60px] w-[43px]"
       }`}
       title={RESOURCE_NAMES[resource]}
     >
-      {RESOURCE_SYMBOLS[resource]}
+      <img
+        className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+        src={RESOURCE_CARD_FILES[resource]}
+        alt={RESOURCE_NAMES[resource]}
+        draggable={false}
+      />
       {count !== undefined && count > 0 && (
-        <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+        <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white">
           {count}
         </span>
       )}
@@ -222,8 +212,8 @@ function TradeSide({
             <div key={resource} className="flex flex-col items-center gap-1">
               <button
                 type="button"
-                className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
-                  bundle[resource] > 0 ? "outline outline-[3px] outline-offset-1 outline-catan-gold" : ""
+                className={`relative inline-flex h-[60px] w-[43px] items-center justify-center rounded-[4px] transition ${
+                  bundle[resource] > 0 ? "outline outline-[3px] outline-offset-1 outline-catan-gold" : "hover:-translate-y-0.5"
                 }`}
                 title={
                   available === undefined
@@ -232,9 +222,14 @@ function TradeSide({
                 }
                 onClick={() => onAdjust(resource, 1)}
               >
-                {RESOURCE_SYMBOLS[resource]}
+                <img
+                  className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                  src={RESOURCE_CARD_FILES[resource]}
+                  alt={RESOURCE_NAMES[resource]}
+                  draggable={false}
+                />
                 {bundle[resource] > 0 && (
-                  <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+                  <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white">
                     {bundle[resource]}
                   </span>
                 )}
