@@ -1,0 +1,23 @@
+import { useMemo } from "react";
+import { createDemoSnapshot } from "../demo";
+import GameRoom from "./GameRoom";
+
+export default function DemoPreview({ onBack }: { onBack: () => void }) {
+  const demo = useMemo(createDemoSnapshot, []);
+
+  return (
+    <div className="game-app-shell">
+      <GameRoom
+        room={demo.room}
+        messages={demo.messages}
+        events={demo.events}
+        busy={false}
+        demo
+        onAction={async () => undefined}
+        onSendMessage={async () => undefined}
+        onLeave={onBack}
+        onCopyInvite={() => undefined}
+      />
+    </div>
+  );
+}
