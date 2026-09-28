@@ -422,6 +422,14 @@ function getVictimsAtHex(
   );
 }
 
+export function getRobberVictims(
+  state: GameState,
+  hexId: string,
+  currentPlayerId: string,
+): string[] {
+  return getVictimsAtHex(state, hexId, currentPlayerId).map((player) => player.id);
+}
+
 function stealRandomResource(
   thief: PlayerState,
   victim: PlayerState,
@@ -1031,7 +1039,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
     }
 
     case "end-turn": {
-      requireMainTurn(next, action.playerId);
+      requirePhase(next, "main", "trade");
+      requireCurrentPlayer(next, action.playerId);
       declareWinnerIfReady(next, action.playerId);
       if (next.winnerId) break;
       next.currentPlayerIndex = (next.currentPlayerIndex + 1) % next.players.length;

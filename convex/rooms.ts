@@ -1,15 +1,20 @@
 import {
   applyAction,
   createGame,
+  emptyResources,
   EngineError,
   getLegalCityUpgrades,
   getLegalRoadPlacements,
   getLegalSettlementPlacements,
   getMaritimeTradeRatio,
   getPlayerView,
+  getRobberVictims,
+  RESOURCES,
 } from "@catan/engine";
-import type { GameAction, GameState } from "@catan/engine";
+import type { GameAction, GameState, Resource, ResourceBundle } from "@catan/engine";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
 import { mutation, query, type MutationCtx, type QueryCtx, type RoomDocument } from "./lib/server";
 import { gameActionValidator } from "./validators";
 
@@ -18,8 +23,33 @@ const PRESENCE_TIMEOUT_MS = 45_000;
 const MAX_ROOM_PLAYERS = 4;
 const MAX_NAME_LENGTH = 24;
 const MAX_MESSAGE_LENGTH = 500;
+const DEFAULT_TURN_TIME_LIMIT_SECONDS = 60;
+const MIN_TURN_TIME_LIMIT_SECONDS = 10;
+const MAX_TURN_TIME_LIMIT_SECONDS = 600;
+const BOT_ACTION_DELAY_MS = 5_000;
+const MAX_BOT_ACTIONS_PER_RUN = 8;
+const MAX_TIMEOUT_ACTIONS_PER_RUN = 16;
 
 type RoomMember = RoomDocument["players"][number];
+
+interface TurnStat {
+  totalMs: number;
+  turns: number;
+  lastTurnMs: number;
+}
+
+interface GameFlow {
+  state: GameState;
+  turnStartedAt: number | null;
+  turnStats: Record<string, TurnStat>;
+}
+
+interface FlowEvent {
+  actorId: string | null;
+  actorName: string;
+  kind: "system" | "action";
+  message: string;
+}
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });
@@ -162,6 +192,204 @@ async function writeEvent(
   });
 }
 
+function playerIdAt(state: GameState): string {
+  const player = state.players[state.currentPlayerIndex];
+  if (!player) throw new Error("El estado no tiene un jugador activo.");
+  return player.id;
+}
+
+function playerName(room: RoomDocument, playerId: string): string {
+  return room.players.find((player) => player.id === playerId)?.name ?? "Jugador";
+}
+
+function isBotPlayer(room: RoomDocument, playerId: string): boolean {
+  return room.players.some((player) => player.id === playerId && player.isBot === true);
+}
+
+function botsNeedingDiscard(room: RoomDocument, state: GameState): string[] {
+  return Object.keys(state.pendingDiscards)
+    .filter((playerId) => isBotPlayer(room, playerId))
+    .sort();
+}
+
+function botActionKey(room: RoomDocument, state: GameState): string | null {
+  const discards = botsNeedingDiscard(room, state);
+  const actingPlayerId = playerIdAt(state);
+  if (discards.length === 0 && !isBotPlayer(room, actingPlayerId)) return null;
+  return [state.turnNumber, state.phase, actingPlayerId, discards.join("+")].join(":");
+}
+
+function randomItem<T>(items: readonly T[]): T | null {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
+}
+
+function randomDiscardBundle(state: GameState, playerId: string, count: number): ResourceBundle {
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  const pool: Resource[] = [];
+  if (player) {
+    for (const resource of RESOURCES) {
+      for (let amount = 0; amount < player.resources[resource]; amount += 1) pool.push(resource);
+    }
+  }
+  const bundle = emptyResources();
+  for (let taken = 0; taken < count && pool.length > 0; taken += 1) {
+    const [resource] = pool.splice(Math.floor(Math.random() * pool.length), 1);
+    if (resource) bundle[resource] += 1;
+  }
+  return bundle;
+}
+
+function randomRobberAction(state: GameState, playerId: string): GameAction | null {
+  const hexId = randomItem(
+    state.board.hexes.filter((hex) => hex.id !== state.robberHexId).map((hex) => hex.id),
+  );
+  if (!hexId) return null;
+  const victims = getRobberVictims(state, hexId, playerId);
+  const victimId = victims.length > 1 ? randomItem(victims) : victims[0] ?? null;
+  return { type: "move-robber", playerId, hexId, victimId };
+}
+
+function botTurnAction(state: GameState, playerId: string): GameAction | null {
+  switch (state.phase) {
+    case "setup-settlement": {
+      const vertexId = randomItem(getLegalSettlementPlacements(state, playerId));
+      return vertexId ? { type: "place-setup-settlement", playerId, vertexId } : null;
+    }
+    case "setup-road": {
+      const edgeId = randomItem(getLegalRoadPlacements(state, playerId));
+      return edgeId ? { type: "place-setup-road", playerId, edgeId } : null;
+    }
+    case "awaiting-roll":
+      return { type: "roll", playerId };
+    case "robber":
+      return randomRobberAction(state, playerId);
+    case "main":
+    case "trade":
+      return { type: "end-turn", playerId };
+    default:
+      return null;
+  }
+}
+
+function timeoutAction(state: GameState, timedOutPlayerId: string): GameAction | null {
+  if (state.phase === "finished") return null;
+  if (state.phase === "discard") {
+    const playerId = Object.keys(state.pendingDiscards)[0];
+    if (!playerId) return null;
+    const count = state.pendingDiscards[playerId]!;
+    return { type: "discard", playerId, resources: randomDiscardBundle(state, playerId, count) };
+  }
+  if (playerIdAt(state) !== timedOutPlayerId) return null;
+  return botTurnAction(state, timedOutPlayerId);
+}
+
+function gameFlowFromRoom(room: RoomDocument): GameFlow | null {
+  const state = room.gameState as GameState | undefined;
+  if (!state) return null;
+  return {
+    state,
+    turnStartedAt: room.turnStartedAt ?? null,
+    turnStats: { ...(room.turnStats ?? {}) },
+  };
+}
+
+function advanceGameFlow(room: RoomDocument, flow: GameFlow, action: GameAction): GameFlow {
+  const previous = flow.state;
+  const next = applyAction(previous, action);
+  const now = Date.now();
+  const previousPlayerId = playerIdAt(previous);
+  const nextPlayerId = playerIdAt(next);
+  const playerChanged = previousPlayerId !== nextPlayerId;
+  const turnAdvanced = next.turnNumber !== previous.turnNumber;
+  const finished = next.phase === "finished";
+  const turnEnded = previous.turnNumber >= 1 && (playerChanged || turnAdvanced || finished);
+
+  const turnStats = { ...flow.turnStats };
+  let turnStartedAt = flow.turnStartedAt;
+
+  if (turnEnded) {
+    const duration = Math.max(0, now - (turnStartedAt ?? now));
+    const previousStats = turnStats[previousPlayerId] ?? { totalMs: 0, turns: 0, lastTurnMs: 0 };
+    turnStats[previousPlayerId] = {
+      totalMs: previousStats.totalMs + duration,
+      turns: previousStats.turns + 1,
+      lastTurnMs: duration,
+    };
+    turnStartedAt = null;
+  }
+
+  if (!finished && (playerChanged || turnAdvanced || turnStartedAt === null)) {
+    turnStartedAt = now;
+  }
+
+  return { state: next, turnStartedAt, turnStats };
+}
+
+function actionEvent(action: GameAction, actorName: string, nextState: GameState): FlowEvent {
+  return {
+    actorId: action.playerId,
+    actorName,
+    kind: "action",
+    message: actionLogMessage(action, actorName, nextState),
+  };
+}
+
+async function commitGameFlow(
+  ctx: MutationCtx,
+  room: RoomDocument,
+  flow: GameFlow,
+  events: FlowEvent[] = [],
+): Promise<void> {
+  const now = Date.now();
+  const finished = flow.state.phase === "finished";
+  const limitSeconds = room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS;
+  const deadline =
+    !finished && limitSeconds > 0 && flow.turnStartedAt !== null
+      ? flow.turnStartedAt + limitSeconds * 1000
+      : null;
+  const botKey = finished ? null : botActionKey(room, flow.state);
+
+  await ctx.db.patch(room._id, {
+    gameState: flow.state,
+    status: finished ? "finished" : "playing",
+    updatedAt: now,
+    turnStartedAt: flow.turnStartedAt ?? undefined,
+    turnDeadlineAt: deadline ?? undefined,
+    turnStats: flow.turnStats,
+    botTurnKey: botKey ?? undefined,
+  });
+
+  for (const event of events) {
+    await writeEvent(ctx, room, event.actorId, event.actorName, event.kind, event.message);
+  }
+
+  if (deadline !== null) {
+    await ctx.scheduler.runAfter(Math.max(0, deadline - now), internal.rooms.enforceTurnTimeout, {
+      roomId: room._id,
+      expectedDeadline: deadline,
+    });
+  }
+
+  if (botKey !== null && room.botTurnKey !== botKey) {
+    await ctx.scheduler.runAfter(BOT_ACTION_DELAY_MS, internal.rooms.playBotTurn, {
+      roomId: room._id,
+      expectedKey: botKey,
+    });
+  }
+}
+
+function isValidTurnTimeLimit(seconds: number): boolean {
+  if (!Number.isInteger(seconds)) return false;
+  if (seconds === 0) return true;
+  return seconds >= MIN_TURN_TIME_LIMIT_SECONDS && seconds <= MAX_TURN_TIME_LIMIT_SECONDS;
+}
+
+function createBotIdentity(prefix: string): string {
+  const random = `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${random.padEnd(32, "0")}`;
+}
+
 export const createRoom = mutation({
   args: {
     code: v.string(),
@@ -182,6 +410,7 @@ export const createRoom = mutation({
       status: "lobby",
       hostPlayerId: playerId,
       players: [{ id: playerId, token: args.playerToken, name, ready: false, joinedAt: now }],
+      turnTimeLimitSeconds: DEFAULT_TURN_TIME_LIMIT_SECONDS,
       createdAt: now,
       updatedAt: now,
     });
@@ -266,6 +495,70 @@ export const setReady = mutation({
   },
 });
 
+export const addBot = mutation({
+  args: { code: v.string(), playerToken: v.string() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) fail("HOST_ONLY", "Solo quien creó la sala puede agregar bots.");
+    if (room.players.length >= MAX_ROOM_PLAYERS) fail("ROOM_FULL", "La sala ya tiene cuatro jugadores.");
+
+    let number = 1;
+    while (room.players.some((player) => player.name === `Bot ${number}`)) number += 1;
+    const bot: RoomMember = {
+      id: createBotIdentity("bot"),
+      token: createBotIdentity("token"),
+      name: `Bot ${number}`,
+      ready: true,
+      joinedAt: Date.now(),
+      isBot: true,
+    };
+    await ctx.db.patch(room._id, {
+      players: [...room.players, bot],
+      updatedAt: Date.now(),
+    });
+    await writeEvent(ctx, room, bot.id, bot.name, "system", `${bot.name} se unió a la sala.`);
+    return { botId: bot.id };
+  },
+});
+
+export const removeBot = mutation({
+  args: { code: v.string(), playerToken: v.string(), botId: v.string() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) fail("HOST_ONLY", "Solo quien creó la sala puede quitar bots.");
+    const bot = room.players.find((player) => player.id === args.botId && player.isBot === true);
+    if (!bot) fail("BOT_NOT_FOUND", "Ese bot ya no está en la sala.");
+
+    await ctx.db.patch(room._id, {
+      players: room.players.filter((player) => player.id !== bot.id),
+      updatedAt: Date.now(),
+    });
+    await writeEvent(ctx, room, bot.id, bot.name, "system", `${bot.name} salió de la sala.`);
+    return { removed: true };
+  },
+});
+
+export const setTurnTimeLimit = mutation({
+  args: { code: v.string(), playerToken: v.string(), seconds: v.number() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) {
+      fail("HOST_ONLY", "Solo quien creó la sala puede cambiar el tiempo por turno.");
+    }
+    if (!isValidTurnTimeLimit(args.seconds)) {
+      fail(
+        "INVALID_TIME_LIMIT",
+        `El límite debe ser 0 (sin límite) o estar entre ${MIN_TURN_TIME_LIMIT_SECONDS} y ${MAX_TURN_TIME_LIMIT_SECONDS} segundos.`,
+      );
+    }
+    await ctx.db.patch(room._id, { turnTimeLimitSeconds: args.seconds, updatedAt: Date.now() });
+    return { seconds: args.seconds };
+  },
+});
+
 export const startGame = mutation({
   args: { code: v.string(), playerToken: v.string() },
   handler: async (ctx, args) => {
@@ -281,12 +574,12 @@ export const startGame = mutation({
       players: room.players.map(({ id, name }) => ({ id, name })),
       seed: String(room._id),
     });
-    await ctx.db.patch(room._id, {
-      status: "playing",
-      gameState,
-      updatedAt: Date.now(),
-    });
     await writeEvent(ctx, room, member.id, member.name, "system", "La partida comenzó.");
+    await commitGameFlow(ctx, room, {
+      state: gameState,
+      turnStartedAt: Date.now(),
+      turnStats: {},
+    });
     return { started: true };
   },
 });
@@ -322,10 +615,16 @@ export const getRoom = query({
         id: player.id,
         name: player.name,
         ready: player.ready,
+        isBot: player.isBot === true,
         isHost: player.id === room.hostPlayerId,
         isSelf: player.id === member.id,
-        online: now - (lastSeenByPlayerId.get(player.id) ?? 0) < PRESENCE_TIMEOUT_MS,
+        online:
+          player.isBot === true ||
+          now - (lastSeenByPlayerId.get(player.id) ?? 0) < PRESENCE_TIMEOUT_MS,
       })),
+      turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS,
+      turnDeadlineAt: room.turnDeadlineAt ?? null,
+      turnStats: room.turnStats ?? {},
       game: gameState ? getPlayerView(gameState, member.id) : null,
       legal: gameState
         ? {
@@ -463,11 +762,13 @@ export const applyGameAction = mutation({
     if (room.status !== "playing" || !room.gameState) {
       fail("GAME_NOT_RUNNING", "La sala todavía no tiene una partida en curso.");
     }
+    const flow = gameFlowFromRoom(room);
+    if (!flow) fail("GAME_NOT_RUNNING", "La sala todavía no tiene una partida en curso.");
 
     const action = { ...args.action, playerId: member.id } as GameAction;
-    let nextState: GameState;
+    let next: GameFlow;
     try {
-      nextState = applyAction(room.gameState as GameState, action);
+      next = advanceGameFlow(room, flow, action);
     } catch (error) {
       if (error instanceof EngineError) {
         throw new ConvexError({ code: error.code, message: error.message });
@@ -475,9 +776,82 @@ export const applyGameAction = mutation({
       throw error;
     }
 
-    const status = nextState.phase === "finished" ? "finished" : "playing";
-    await ctx.db.patch(room._id, { gameState: nextState, status, updatedAt: Date.now() });
-    await writeEvent(ctx, room, member.id, member.name, "action", actionLogMessage(action, member.name, nextState));
-    return { phase: nextState.phase, winnerId: nextState.winnerId };
+    await commitGameFlow(ctx, room, next, [actionEvent(action, member.name, next.state)]);
+    return { phase: next.state.phase, winnerId: next.state.winnerId };
+  },
+});
+
+export const playBotTurn = internalMutation({
+  args: { roomId: v.id("rooms"), expectedKey: v.string() },
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get("rooms", args.roomId);
+    if (!room || room.status !== "playing") return null;
+    let flow = gameFlowFromRoom(room);
+    if (!flow) return null;
+    if (botActionKey(room, flow.state) !== args.expectedKey) return null;
+
+    const actingPlayerId = playerIdAt(flow.state);
+    const events: FlowEvent[] = [];
+    for (let step = 0; step < MAX_BOT_ACTIONS_PER_RUN; step += 1) {
+      const discardPlayerId = botsNeedingDiscard(room, flow.state)[0];
+      const action =
+        discardPlayerId !== undefined
+          ? {
+              type: "discard" as const,
+              playerId: discardPlayerId,
+              resources: randomDiscardBundle(
+                flow.state,
+                discardPlayerId,
+                flow.state.pendingDiscards[discardPlayerId]!,
+              ),
+            }
+          : playerIdAt(flow.state) === actingPlayerId && isBotPlayer(room, actingPlayerId)
+            ? botTurnAction(flow.state, actingPlayerId)
+            : null;
+      if (!action) break;
+
+      flow = advanceGameFlow(room, flow, action);
+      events.push(actionEvent(action, playerName(room, action.playerId), flow.state));
+      if (flow.state.phase === "finished") break;
+      if (playerIdAt(flow.state) !== actingPlayerId && flow.state.phase !== "discard") break;
+    }
+
+    if (events.length === 0) return null;
+    await commitGameFlow(ctx, room, flow, events);
+    return null;
+  },
+});
+
+export const enforceTurnTimeout = internalMutation({
+  args: { roomId: v.id("rooms"), expectedDeadline: v.number() },
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get("rooms", args.roomId);
+    if (!room || room.status !== "playing") return null;
+    if (room.turnDeadlineAt !== args.expectedDeadline) return null;
+    if (Date.now() < args.expectedDeadline) return null;
+    let flow = gameFlowFromRoom(room);
+    if (!flow) return null;
+
+    const timedOutPlayerId = playerIdAt(flow.state);
+    const timedOutName = playerName(room, timedOutPlayerId);
+    const events: FlowEvent[] = [];
+    for (let step = 0; step < MAX_TIMEOUT_ACTIONS_PER_RUN; step += 1) {
+      const action = timeoutAction(flow.state, timedOutPlayerId);
+      if (!action) break;
+      flow = advanceGameFlow(room, flow, action);
+      events.push(actionEvent(action, playerName(room, action.playerId), flow.state));
+      if (flow.state.phase === "finished") break;
+    }
+
+    if (events.length === 0) return null;
+    events.unshift({
+      actorId: timedOutPlayerId,
+      actorName: timedOutName,
+      kind: "system",
+      message: `Se agotó el tiempo de ${timedOutName}.`,
+    });
+
+    await commitGameFlow(ctx, room, flow, events);
+    return null;
   },
 });

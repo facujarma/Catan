@@ -17,9 +17,24 @@ export default defineSchema({
         name: v.string(),
         ready: v.boolean(),
         joinedAt: v.number(),
+        isBot: v.optional(v.boolean()),
       }),
     ),
     gameState: v.optional(v.any()),
+    turnTimeLimitSeconds: v.optional(v.number()),
+    turnStartedAt: v.optional(v.number()),
+    turnDeadlineAt: v.optional(v.number()),
+    turnStats: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          totalMs: v.number(),
+          turns: v.number(),
+          lastTurnMs: v.number(),
+        }),
+      ),
+    ),
+    botTurnKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

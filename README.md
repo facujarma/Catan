@@ -24,6 +24,8 @@ Para ver la interfaz sin configurar Convex ni reunir jugadores, abrí la app y e
 
 Las salas son privadas con código de cuatro caracteres. La identidad invitada y su token de acceso se guardan en `localStorage`; las consultas de Convex devuelven la vista pública y filtran la mano para cada jugador.
 
+El anfitrión puede completar la sala con bots de prueba: esperan cinco segundos, tiran si les toca, descartan al azar y pasan el turno. También puede configurar un límite de tiempo por turno (o desactivarlo): al agotarse, el servidor resuelve el turno automáticamente. En partida, el temporizador aparece junto al turno activo y, al pasar el cursor sobre un jugador, se ve su tiempo promedio por turno.
+
 ## Deploy
 
 - Frontend: importar el repositorio en Vercel. `vercel.json` usa los workspaces de Bun y publica `apps/web/dist`.

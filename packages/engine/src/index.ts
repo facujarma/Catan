@@ -7,6 +7,7 @@ export {
   getLegalRoadPlacements,
   getLegalSettlementPlacements,
   getMaritimeTradeRatio,
+  getRobberVictims,
 } from "./game";
 export type { EngineErrorCode } from "./game";
 export {

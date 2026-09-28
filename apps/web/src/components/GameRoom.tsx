@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/engine";
 import BoardSvg, { type BoardMode } from "./BoardSvg";
@@ -47,6 +47,9 @@ export default function GameRoom({
 
   const isMyTurn = game.currentPlayerId === room.selfPlayerId;
   const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
+  const currentIsBot = room.players.some(
+    (player) => player.id === game.currentPlayerId && player.isBot,
+  );
   const offer = game.activeTrade;
   const eligibleVictims = pendingRobberHexId
     ? playersAdjacentToHex(pendingRobberHexId).filter((player) => player.resourceCardCount > 0)
@@ -208,8 +211,13 @@ export default function GameRoom({
               isMyTurn ? "bg-[#e7f6e2] text-[#2c6b34]" : "bg-white/[0.16] text-[#eaf4fb]"
             }`}
           >
-            {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
+            {isMyTurn
+              ? "Tu turno"
+              : `Turno de ${currentIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </span>
+          {!demo && game.phase !== "finished" && room.turnDeadlineAt !== null && (
+            <TurnTimer deadlineAt={room.turnDeadlineAt} />
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!demo && (
@@ -578,15 +586,25 @@ function PlayerPanel({
   const lobbyPlayer = room.players.find((candidate) => candidate.id === player.id);
   const points = self ? totalPoints ?? player.publicVictoryPoints : player.publicVictoryPoints;
   const offline = Boolean(lobbyPlayer && !lobbyPlayer.online);
+  const isBot = Boolean(lobbyPlayer?.isBot);
+  const stat = room.turnStats[player.id];
+  const averageMs = stat && stat.turns > 0 ? stat.totalMs / stat.turns : null;
+  const averageLabel =
+    averageMs === null ? "Sin turnos registrados" : `${formatDuration(averageMs)} por turno`;
+  const statsDetail =
+    stat && stat.turns > 0
+      ? `${stat.turns} ${stat.turns === 1 ? "turno" : "turnos"} · último ${formatDuration(stat.lastTurnMs)}`
+      : "Todavía no jugó turnos";
   const tone = player.isCurrentPlayer
     ? `border-[#ffd76a] ring-2 ring-[#ffd76a]/55 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.94]"}`
     : `border-black/15 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.92]"}`;
 
   return (
     <article
-      className={`relative flex items-center gap-2 rounded-[10px] border px-2 py-[7px] shadow-[0_2px_6px_rgba(10,35,55,0.18)] max-[940px]:min-w-[190px] ${tone} ${
+      className={`group relative flex items-center gap-2 rounded-[10px] border px-2 py-[7px] shadow-[0_2px_6px_rgba(10,35,55,0.18)] max-[940px]:min-w-[190px] ${tone} ${
         offline ? "opacity-70" : ""
       }`}
+      title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail})`}
     >
       <span
         className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border-2 border-white/85 text-xs font-black text-white shadow-[0_2px_5px_rgba(0,0,0,0.25)] [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]"
@@ -597,6 +615,7 @@ function PlayerPanel({
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1.5">
           <strong className="block truncate text-xs font-extrabold text-[#33302a]">
+            {isBot ? "🤖 " : ""}
             {player.name}
             {self ? " (vos)" : ""}
           </strong>
@@ -634,7 +653,46 @@ function PlayerPanel({
           )}
         </div>
       )}
+      <div className="pointer-events-none absolute inset-0 z-10 hidden flex-col items-center justify-center gap-0.5 rounded-[10px] bg-[#10344b]/95 px-2 text-center group-hover:flex">
+        <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#9fc3dc]">
+          Ritmo de juego
+        </span>
+        <span className="text-[12px] font-black text-[#f4f9fd]">{averageLabel}</span>
+        <span className="text-[9px] font-semibold text-[#cfe3f2]">{statsDetail}</span>
+      </div>
     </article>
+  );
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} min ${String(seconds % 60).padStart(2, "0")} s`;
+}
+
+function TurnTimer({ deadlineAt }: { deadlineAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [deadlineAt]);
+
+  const remainingMs = Math.max(0, deadlineAt - now);
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const urgent = remainingMs <= 10_000;
+  const label = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+
+  return (
+    <span
+      className={`rounded-full px-2.5 py-[3px] font-mono text-[11px] font-bold ${
+        urgent ? "bg-[#ffe1d9] text-[#9c3b28]" : "bg-[#dcecf7] text-[#1f4f6e]"
+      }`}
+      title="Tiempo restante del turno"
+    >
+      ⏱ {label}
+    </span>
   );
 }
 

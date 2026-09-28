@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, totalResources } from "../src";
-import { bundle, findSeedForRoll, findStateWithRollOnHex, setResource } from "./helpers";
+import { applyAction, getRobberVictims, totalResources } from "../src";
+import { bundle, findSeedForRoll, findStateWithRollOnHex, mainState, setResource } from "./helpers";
 
 describe("dados, producción y ladrón", () => {
   it("reparte producción por poblados y duplica la producción de ciudades", () => {
@@ -124,6 +124,23 @@ describe("dados, producción y ladrón", () => {
         resources: bundle({ brick: 4 }),
       }),
     ).toThrow(/no podés descartar/i);
+  });
+
+  it("informa las víctimas posibles del ladrón excluyendo al jugador activo y a quien no tiene cartas", () => {
+    const state = mainState(321);
+    const hex = state.board.hexes.find((candidate) => candidate.id !== state.robberHexId)!;
+    const vertices = state.board.vertices.filter((vertex) => vertex.hexIds.includes(hex.id));
+    expect(vertices.length).toBeGreaterThanOrEqual(3);
+
+    state.players[0]!.settlements = [vertices[0]!.id];
+    state.players[0]!.resources = bundle({ wood: 2 });
+    state.players[1]!.cities = [vertices[1]!.id];
+    state.players[1]!.resources = bundle({ ore: 1 });
+    state.players[2]!.settlements = [vertices[2]!.id];
+    state.players[2]!.resources = bundle();
+
+    expect(getRobberVictims(state, hex.id, "p1")).toEqual(["p2"]);
+    expect(getRobberVictims(state, hex.id, "p3").sort()).toEqual(["p1", "p2"]);
   });
 
   it("no modifica el estado de entrada cuando calcula una tirada", () => {

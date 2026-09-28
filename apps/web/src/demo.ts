@@ -164,6 +164,7 @@ export function createDemoSnapshot(): {
   const state = decorateGame(finishSetup(initial));
   const playerId = DEMO_PLAYERS[0]!.id;
   const game = getPlayerView(state, playerId);
+  const timestamp = Date.now();
   const room: RoomSnapshot = {
     code: "VISTA",
     status: "playing",
@@ -173,10 +174,19 @@ export function createDemoSnapshot(): {
       id: player.id,
       name: player.name,
       ready: true,
+      isBot: index === 3,
       isHost: index === 0,
       isSelf: index === 0,
       online: true,
     })),
+    turnTimeLimitSeconds: 60,
+    turnDeadlineAt: timestamp + 45_000,
+    turnStats: {
+      "demo-you": { totalMs: 96_000, turns: 3, lastTurnMs: 28_000 },
+      "demo-ana": { totalMs: 74_000, turns: 2, lastTurnMs: 41_000 },
+      "demo-bruno": { totalMs: 312_000, turns: 3, lastTurnMs: 128_000 },
+      "demo-luz": { totalMs: 88_000, turns: 2, lastTurnMs: 44_000 },
+    },
     game,
     legal: {
       settlementVertexIds: getLegalSettlementPlacements(state, playerId),
@@ -196,7 +206,6 @@ export function createDemoSnapshot(): {
     },
   };
 
-  const timestamp = Date.now();
   const messages: ChatMessage[] = [
     { id: "demo-chat-1", playerId: "demo-ana", playerName: "Ana", body: "¡Buen bosque, me salió 8!", createdAt: timestamp - 120_000 },
     { id: "demo-chat-2", playerId: "demo-you", playerName: "Vos", body: "¿Alguien cambia trigo por ladrillo?", createdAt: timestamp - 65_000 },

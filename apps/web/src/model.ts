@@ -8,9 +8,16 @@ export interface RoomPlayer {
   id: string;
   name: string;
   ready: boolean;
+  isBot: boolean;
   isHost: boolean;
   isSelf: boolean;
   online: boolean;
+}
+
+export interface TurnStat {
+  totalMs: number;
+  turns: number;
+  lastTurnMs: number;
 }
 
 export interface LegalPlacements {
@@ -28,6 +35,9 @@ export interface RoomSnapshot {
   hostPlayerId: string;
   selfPlayerId: string;
   players: RoomPlayer[];
+  turnTimeLimitSeconds: number;
+  turnDeadlineAt: number | null;
+  turnStats: Record<string, TurnStat>;
   game: PlayerGameView | null;
   legal: LegalPlacements;
 }

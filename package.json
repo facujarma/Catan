@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "bun --filter @catan/web dev",
     "build": "bun --filter @catan/web build",
-    "test": "bun --filter @catan/engine test",
+    "test": "bun --filter @catan/engine test && vitest run --config vitest.convex.config.ts",
     "typecheck": "bun --filter @catan/engine typecheck && bun --filter @catan/web typecheck && tsc -p convex/tsconfig.json",
     "convex:dev": "bunx convex dev",
     "convex:deploy": "bunx convex deploy",
@@ -22,7 +22,9 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "convex": "^1.25.0",
+    "convex-test": "^0.0.60",
     "typescript": "^5.9.0",
+    "vite": "^7.0.0",
     "vitest": "^3.2.0"
   }
 }

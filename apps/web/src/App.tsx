@@ -63,6 +63,9 @@ function CatanApp() {
   const createRoomMutation = useMutation(api.rooms.createRoom);
   const joinRoomMutation = useMutation(api.rooms.joinRoom);
   const setReadyMutation = useMutation(api.rooms.setReady);
+  const addBotMutation = useMutation(api.rooms.addBot);
+  const removeBotMutation = useMutation(api.rooms.removeBot);
+  const setTurnTimeLimitMutation = useMutation(api.rooms.setTurnTimeLimit);
   const startGameMutation = useMutation(api.rooms.startGame);
   const applyActionMutation = useMutation(api.rooms.applyGameAction);
   const heartbeatMutation = useMutation(api.rooms.heartbeat);
@@ -177,6 +180,25 @@ function CatanApp() {
   const toggleReady = async (ready: boolean) => {
     if (!roomCode) return;
     await run(() => setReadyMutation({ code: roomCode, playerToken: identity.playerToken, ready }));
+  };
+
+  const addBot = async () => {
+    if (!roomCode) return;
+    await run(() => addBotMutation({ code: roomCode, playerToken: identity.playerToken }));
+  };
+
+  const removeBot = async (botId: string) => {
+    if (!roomCode) return;
+    await run(() =>
+      removeBotMutation({ code: roomCode, playerToken: identity.playerToken, botId }),
+    );
+  };
+
+  const setTurnTimeLimit = async (seconds: number) => {
+    if (!roomCode) return;
+    await run(() =>
+      setTurnTimeLimitMutation({ code: roomCode, playerToken: identity.playerToken, seconds }),
+    );
   };
 
   const startGame = async () => {
@@ -311,6 +333,9 @@ function CatanApp() {
             onNameChange={setName}
             onSaveName={saveNameInRoom}
             onToggleReady={toggleReady}
+            onAddBot={addBot}
+            onRemoveBot={removeBot}
+            onTurnTimeLimitChange={setTurnTimeLimit}
             onStart={startGame}
             onLeave={leaveRoom}
             onCopyInvite={copyInvite}

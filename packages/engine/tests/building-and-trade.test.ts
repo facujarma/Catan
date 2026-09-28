@@ -134,6 +134,27 @@ describe("comercio", () => {
     expect(state.players[2]!.resources).toEqual(bundle({ wood: 2, wheat: 1 }));
   });
 
+  it("permite terminar el turno con una oferta abierta y la descarta", () => {
+    let state = mainState();
+    state.players[0]!.resources = bundle({ wheat: 1 });
+    state.players[1]!.resources = bundle({ wood: 1 });
+
+    state = applyAction(state, {
+      type: "make-offer",
+      playerId: "p1",
+      give: bundle({ wheat: 1 }),
+      want: bundle({ wood: 1 }),
+    });
+    state = applyAction(state, { type: "accept-offer", playerId: "p2" });
+    expect(state.phase).toBe("trade");
+
+    const next = applyAction(state, { type: "end-turn", playerId: "p1" });
+    expect(next.phase).toBe("awaiting-roll");
+    expect(next.activeTrade).toBeNull();
+    expect(next.currentPlayerIndex).toBe(1);
+    expect(next.turnNumber).toBe(state.turnNumber + 1);
+  });
+
   it("registra rechazos, permite cambiar de opinión y cancelar la oferta", () => {
     let state = mainState();
     state.players[0]!.resources = bundle({ wheat: 1 });

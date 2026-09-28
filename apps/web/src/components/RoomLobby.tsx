@@ -8,10 +8,24 @@ interface RoomLobbyProps {
   onNameChange: (name: string) => void;
   onSaveName: () => void;
   onToggleReady: (ready: boolean) => void;
+  onAddBot: () => void;
+  onRemoveBot: (botId: string) => void;
+  onTurnTimeLimitChange: (seconds: number) => void;
   onStart: () => void;
   onLeave: () => void;
   onCopyInvite: () => void;
 }
+
+const TURN_TIME_OPTIONS = [
+  { value: 0, label: "Sin límite" },
+  { value: 10, label: "10 segundos" },
+  { value: 15, label: "15 segundos" },
+  { value: 30, label: "30 segundos" },
+  { value: 60, label: "60 segundos" },
+  { value: 90, label: "90 segundos" },
+  { value: 120, label: "2 minutos" },
+  { value: 180, label: "3 minutos" },
+];
 
 export default function RoomLobby({
   room,
@@ -20,12 +34,27 @@ export default function RoomLobby({
   onNameChange,
   onSaveName,
   onToggleReady,
+  onAddBot,
+  onRemoveBot,
+  onTurnTimeLimitChange,
   onStart,
   onLeave,
   onCopyInvite,
 }: RoomLobbyProps) {
   const me = room.players.find((player) => player.isSelf);
   const canStart = room.players.length >= 3 && room.players.every((player) => player.ready);
+  const turnTimeOptions = TURN_TIME_OPTIONS.some(
+    (option) => option.value === room.turnTimeLimitSeconds,
+  )
+    ? TURN_TIME_OPTIONS
+    : [
+        ...TURN_TIME_OPTIONS,
+        { value: room.turnTimeLimitSeconds, label: `${room.turnTimeLimitSeconds} segundos` },
+      ].sort((left, right) => left.value - right.value);
+  const turnTimeLimitLabel =
+    room.turnTimeLimitSeconds === 0
+      ? "Sin límite"
+      : `${room.turnTimeLimitSeconds} segundos por turno`;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -60,6 +89,60 @@ export default function RoomLobby({
           </div>
         </div>
 
+        <div className="mt-7 rounded-2xl border border-[#e9dfc9] bg-[#faf6eb] p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <label
+                className="block text-xs font-bold uppercase tracking-wider text-[#6d776a]"
+                htmlFor="lobby-turn-limit"
+              >
+                Tiempo máximo por turno
+              </label>
+              <p className="mt-1 max-w-md text-xs leading-5 text-[#8b9083]">
+                Cuando se agota, el servidor resuelve el turno por el jugador (tira, descarta, mueve
+                al ladrón y pasa). Ideal para evaluar a quienes demoran demasiado.
+              </p>
+            </div>
+            {me?.isHost ? (
+              <select
+                id="lobby-turn-limit"
+                className={`${FIELD} w-auto min-w-[150px]`}
+                value={room.turnTimeLimitSeconds}
+                disabled={busy}
+                onChange={(event) => onTurnTimeLimitChange(Number(event.target.value))}
+              >
+                {turnTimeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="rounded-xl border border-[#e2dac9] bg-white/70 px-3 py-2 text-sm font-bold text-[#4d4738]">
+                {turnTimeLimitLabel}
+              </span>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee7d8] pt-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[#6d776a]">
+                Bots de prueba
+              </p>
+              <p className="mt-1 max-w-md text-xs leading-5 text-[#8b9083]">
+                Esperan 5 segundos, tiran si les toca y pasan el turno. Descartan al azar.
+              </p>
+            </div>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              disabled={busy || !me?.isHost || room.players.length >= 4}
+              onClick={onAddBot}
+            >
+              + Agregar bot
+            </button>
+          </div>
+        </div>
+
         <div className="mt-7 flex items-end justify-between gap-3">
           <div>
             <p className={EYEBROW}>Jugadores</p>
@@ -87,19 +170,38 @@ export default function RoomLobby({
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-bold text-[#263c2e]">
+                  {player.isBot && <span aria-hidden="true">🤖 </span>}
                   {player.name}{" "}
                   {player.isSelf && <small className="font-medium text-[#9a7a43]">(vos)</small>}
                 </span>
                 <span className="mt-0.5 block text-xs text-[#8b9083]">
-                  {player.isHost ? "Anfitrión" : player.online ? "En línea" : "Desconectado"}
+                  {player.isHost
+                    ? "Anfitrión"
+                    : player.isBot
+                      ? "Bot de prueba"
+                      : player.online
+                        ? "En línea"
+                        : "Desconectado"}
                 </span>
               </span>
-              <span
-                className={`rounded-full px-2 py-[5px] text-[10px] font-extrabold ${
-                  player.ready ? "bg-[#e7f1df] text-[#4d8050]" : "bg-[#f1efe8] text-[#8c8c7d]"
-                }`}
-              >
-                {player.ready ? "Listo" : "Esperando"}
+              <span className="flex shrink-0 items-center gap-2">
+                {me?.isHost && player.isBot && (
+                  <button
+                    type="button"
+                    className="text-[11px] font-bold text-[#a2564a] enabled:hover:underline disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => onRemoveBot(player.id)}
+                  >
+                    Quitar
+                  </button>
+                )}
+                <span
+                  className={`rounded-full px-2 py-[5px] text-[10px] font-extrabold ${
+                    player.ready ? "bg-[#e7f1df] text-[#4d8050]" : "bg-[#f1efe8] text-[#8c8c7d]"
+                  }`}
+                >
+                  {player.ready ? "Listo" : "Esperando"}
+                </span>
               </span>
             </li>
           ))}
@@ -132,7 +234,8 @@ export default function RoomLobby({
           )}
           {me?.isHost && !canStart && (
             <p className="w-full text-xs text-[#9a7c4d]">
-              Falta que se unan 3 jugadores y todos marquen “Listo”.
+              Falta que se unan 3 jugadores y todos marquen “Listo”. Podés completar la sala con
+              bots.
             </p>
           )}
           <button

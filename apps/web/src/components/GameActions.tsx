@@ -82,6 +82,9 @@ export default function GameActions({
   const pendingCount = game.self.pendingDiscardCount;
   const discardTotal = bundleTotal(discard);
   const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
+  const currentPlayerIsBot = room.players.some(
+    (player) => player.id === game.currentPlayerId && player.isBot,
+  );
 
   useEffect(() => {
     setDiscard(emptyBundle());
@@ -213,7 +216,9 @@ export default function GameActions({
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }}
             />
-            {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
+            {isMyTurn
+              ? "Tu turno"
+              : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </div>
           <div className="flex items-center gap-1.5">
             <span
