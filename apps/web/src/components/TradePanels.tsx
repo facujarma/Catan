@@ -2,6 +2,14 @@ import { useMemo, useState } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { PlayerGameView, Resource, ResourceBundle, TradeOffer } from "@catan/engine";
 import type { GameActionPayload } from "../model";
+import {
+  CG_BUTTON_ACCEPT,
+  CG_BUTTON_NEUTRAL,
+  CG_BUTTON_REJECT,
+  MODAL,
+  MODAL_ACTIONS,
+  MODAL_BACKDROP,
+} from "../ui";
 
 export const RESOURCE_SYMBOLS: Record<Resource, string> = {
   wood: "🌲",
@@ -17,6 +25,14 @@ export const RESOURCE_NAMES: Record<Resource, string> = {
   sheep: "Oveja",
   wheat: "Trigo",
   ore: "Mineral",
+};
+
+export const RESOURCE_CARD_TONES: Record<Resource, string> = {
+  wood: "bg-wood",
+  brick: "bg-brick",
+  sheep: "bg-sheep",
+  wheat: "bg-wheat text-[#6d520a] [text-shadow:none]",
+  ore: "bg-ore",
 };
 
 export function emptyBundle(): ResourceBundle {
@@ -49,22 +65,28 @@ export function ResourceCard({
 }) {
   return (
     <span
-      className={`cg-res-card is-${resource} ${small ? "is-small" : ""}`}
+      className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+        small ? "h-[34px] w-[42px] text-[15px]" : ""
+      }`}
       title={RESOURCE_NAMES[resource]}
     >
       {RESOURCE_SYMBOLS[resource]}
-      {count !== undefined && count > 0 && <span className="cg-res-count">{count}</span>}
+      {count !== undefined && count > 0 && (
+        <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+          {count}
+        </span>
+      )}
     </span>
   );
 }
 
 function ResourceBundleRow({ bundle }: { bundle: ResourceBundle }) {
   return (
-    <div className="cg-offer-cards">
+    <div className="flex flex-wrap justify-center gap-1.5">
       {RESOURCES.filter((resource) => bundle[resource] > 0).map((resource) => (
         <ResourceCard key={resource} resource={resource} count={bundle[resource]} />
       ))}
-      {bundleTotal(bundle) === 0 && <span className="cg-dev-hint">Nada</span>}
+      {bundleTotal(bundle) === 0 && <span className="text-[10px] text-[#9a9384]">Nada</span>}
     </div>
   );
 }
@@ -107,37 +129,51 @@ export function TradeComposer({
   };
 
   return (
-    <div className="cg-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className={MODAL_BACKDROP} role="presentation" onClick={onClose}>
       <section
-        className="cg-modal"
+        className={MODAL}
         role="dialog"
         aria-modal="true"
         aria-labelledby="trade-composer-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="cg-modal-head">
+        <div className="flex items-start justify-between gap-2.5">
           <div>
-            <p className="cg-modal-eyebrow">Comercio entre jugadores</p>
-            <h2 id="trade-composer-title">{counter ? "Contraoferta" : "Nueva oferta"}</h2>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
+              Comercio entre jugadores
+            </p>
+            <h2
+              id="trade-composer-title"
+              className="mt-1 text-[22px] font-black text-[#2c3c30]"
+            >
+              {counter ? "Contraoferta" : "Nueva oferta"}
+            </h2>
           </div>
-          <button className="cg-modal-close" type="button" aria-label="Cerrar" onClick={onClose}>
+          <button
+            className="border-0 bg-transparent text-[22px] leading-none text-[#8b8271]"
+            type="button"
+            aria-label="Cerrar"
+            onClick={onClose}
+          >
             ×
           </button>
         </div>
-        <p className="cg-modal-note">
+        <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
           {counter
             ? "Tu contraoferta reemplaza la oferta actual y queda visible para toda la mesa."
             : "La oferta es global: todos la ven, los que quieran aceptan, y vos elegís con quién cerrar."}
         </p>
 
-        <div className="cg-trade-grid">
+        <div className="mt-3.5 grid grid-cols-1 items-center gap-2 min-[560px]:grid-cols-[1fr_26px_1fr]">
           <TradeSide
             label="Entregás"
             bundle={give}
             max={myResources}
             onAdjust={(resource, delta) => adjust("give", resource, delta)}
           />
-          <div className="cg-trade-arrow">⇄</div>
+          <div className="rotate-90 text-center text-xl font-black text-[#a59a82] min-[560px]:rotate-0">
+            ⇄
+          </div>
           <TradeSide
             label="Pedís"
             bundle={want}
@@ -145,12 +181,12 @@ export function TradeComposer({
           />
         </div>
 
-        <div className="cg-modal-actions">
-          <button className="cg-button is-neutral" type="button" onClick={onClose} disabled={busy}>
+        <div className={MODAL_ACTIONS}>
+          <button className={CG_BUTTON_NEUTRAL} type="button" onClick={onClose} disabled={busy}>
             Cancelar
           </button>
           <button
-            className="cg-button is-accept"
+            className={CG_BUTTON_ACCEPT}
             type="button"
             disabled={busy || bundleTotal(give) === 0 || bundleTotal(want) === 0}
             onClick={submit}
@@ -175,27 +211,49 @@ function TradeSide({
   onAdjust: (resource: Resource, delta: number) => void;
 }) {
   return (
-    <div className="cg-trade-section">
-      <span>{label}</span>
-      <div className="cg-trade-cards">
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-[7px]">
         {RESOURCES.map((resource) => {
           const available = max?.[resource];
           return (
-            <div key={resource} className="cg-trade-pick">
+            <div key={resource} className="flex flex-col items-center gap-1">
               <button
                 type="button"
-                className={`cg-res-card is-small is-${resource} ${bundle[resource] > 0 ? "is-picked" : ""}`}
-                title={available === undefined ? RESOURCE_NAMES[resource] : `${RESOURCE_NAMES[resource]} (tenés ${available})`}
+                className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                  bundle[resource] > 0 ? "outline outline-[3px] outline-offset-1 outline-catan-gold" : ""
+                }`}
+                title={
+                  available === undefined
+                    ? RESOURCE_NAMES[resource]
+                    : `${RESOURCE_NAMES[resource]} (tenés ${available})`
+                }
                 onClick={() => onAdjust(resource, 1)}
               >
                 {RESOURCE_SYMBOLS[resource]}
-                {bundle[resource] > 0 && <span className="cg-res-count">{bundle[resource]}</span>}
+                {bundle[resource] > 0 && (
+                  <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+                    {bundle[resource]}
+                  </span>
+                )}
               </button>
-              <div className="cg-stepper">
-                <button type="button" aria-label={`Quitar ${RESOURCE_NAMES[resource]}`} onClick={() => onAdjust(resource, -1)}>
+              <div className="flex items-center gap-[3px]">
+                <button
+                  type="button"
+                  className="grid h-[18px] w-[18px] place-items-center rounded-[5px] border border-[#cfc5ae] bg-white text-[11px] font-black text-[#5a5140]"
+                  aria-label={`Quitar ${RESOURCE_NAMES[resource]}`}
+                  onClick={() => onAdjust(resource, -1)}
+                >
                   −
                 </button>
-                <button type="button" aria-label={`Agregar ${RESOURCE_NAMES[resource]}`} onClick={() => onAdjust(resource, 1)}>
+                <button
+                  type="button"
+                  className="grid h-[18px] w-[18px] place-items-center rounded-[5px] border border-[#cfc5ae] bg-white text-[11px] font-black text-[#5a5140]"
+                  aria-label={`Agregar ${RESOURCE_NAMES[resource]}`}
+                  onClick={() => onAdjust(resource, 1)}
+                >
                   +
                 </button>
               </div>
@@ -236,54 +294,69 @@ export function TradeOfferPanel({
     game.players.find((player) => player.id === playerId)?.name ?? "jugador";
 
   return (
-    <section className="cg-offer-panel" aria-label="Oferta de comercio global">
-      <header className="cg-offer-head">
+    <section
+      className="absolute left-1/2 top-2.5 z-[45] w-[min(560px,calc(100%-20px))] -translate-x-1/2 rounded-[14px] border border-[#786032]/35 bg-paper-soft shadow-[0_14px_40px_rgba(6,28,44,0.4)]"
+      aria-label="Oferta de comercio global"
+    >
+      <header className="flex items-center gap-2 border-b border-line px-3 py-2">
         <span
-          className="cg-player-avatar"
+          className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border-2 border-white/85 text-xs font-black text-white shadow-[0_2px_5px_rgba(0,0,0,0.25)] [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]"
           style={{ backgroundColor: offerer?.color ?? "#5b6b78" }}
         >
           {offerer?.name.slice(0, 2).toUpperCase()}
         </span>
-        <strong>{isOfferer ? "Tu oferta a la mesa" : `${offerer?.name} ofrece a la mesa`}</strong>
-        <small>En vivo</small>
+        <strong className="text-[13px] text-[#3b352a]">
+          {isOfferer ? "Tu oferta a la mesa" : `${offerer?.name} ofrece a la mesa`}
+        </strong>
+        <small className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-ink-soft">
+          En vivo
+        </small>
       </header>
 
-      <div className="cg-offer-body">
-        <div className="cg-offer-side">
-          <span>Entrega</span>
+      <div className="flex flex-col items-center justify-center gap-3 px-3 py-2.5 min-[560px]:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-ink-soft">
+            Entrega
+          </span>
           <ResourceBundleRow bundle={offer.give} />
         </div>
-        <div className="cg-offer-vs">⇄</div>
-        <div className="cg-offer-side">
-          <span>Pide</span>
+        <div className="text-xl font-black text-[#9a8f76]">⇄</div>
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-ink-soft">
+            Pide
+          </span>
           <ResourceBundleRow bundle={offer.want} />
         </div>
       </div>
 
-      <div className="cg-offer-status">
+      <div className="flex flex-wrap justify-center gap-[5px] border-t border-dashed border-line px-3 pt-[7px]">
         {responders.map((player) => {
           const accepted = offer.acceptedBy.includes(player.id);
           const rejected = offer.rejectedBy.includes(player.id);
+          const tone = accepted
+            ? "bg-[#dff0d8] text-[#2f6b34]"
+            : rejected
+              ? "bg-[#f6dcd6] text-[#99402f]"
+              : "bg-[#efe9da] text-[#7d7462]";
           return (
-            <span
-              key={player.id}
-              className={`cg-status-chip ${accepted ? "is-accepted" : rejected ? "is-rejected" : "is-pending"}`}
-            >
+            <span key={player.id} className={`rounded-full px-2 py-[2px] text-[10px] font-extrabold ${tone}`}>
               {accepted ? "✓" : rejected ? "✕" : "…"} {player.name}
             </span>
           );
         })}
       </div>
 
-      <div className="cg-offer-actions">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 pb-[11px] pt-[9px]">
         {isOfferer ? (
           offer.acceptedBy.length === 0 ? (
-            <span className="cg-dev-hint">Esperando que alguien acepte. Podés cancelar y proponer otra cosa.</span>
+            <span className="text-[10px] text-[#9a9384]">
+              Esperando que alguien acepte. Podés cancelar y proponer otra cosa.
+            </span>
           ) : (
             offer.acceptedBy.map((playerId) => (
               <button
                 key={playerId}
-                className="cg-button is-accept"
+                className={CG_BUTTON_ACCEPT}
                 type="button"
                 disabled={busy}
                 onClick={() => void onAction({ type: "confirm-offer", partnerId: playerId })}
@@ -294,9 +367,11 @@ export function TradeOfferPanel({
           )
         ) : hasAccepted ? (
           <>
-            <span className="cg-status-chip is-accepted">Aceptaste la oferta</span>
+            <span className="rounded-full bg-[#dff0d8] px-2 py-[2px] text-[10px] font-extrabold text-[#2f6b34]">
+              Aceptaste la oferta
+            </span>
             <button
-              className="cg-button is-neutral"
+              className={CG_BUTTON_NEUTRAL}
               type="button"
               disabled={busy}
               onClick={() => void onAction({ type: "reject-offer" })}
@@ -307,7 +382,7 @@ export function TradeOfferPanel({
         ) : (
           <>
             <button
-              className="cg-button is-accept"
+              className={CG_BUTTON_ACCEPT}
               type="button"
               disabled={busy || !canPay}
               title={canPay ? "Aceptar la oferta" : "No tenés los recursos que pide"}
@@ -316,21 +391,21 @@ export function TradeOfferPanel({
               {hasRejected ? "Aceptar igual" : "Aceptar"}
             </button>
             <button
-              className="cg-button is-reject"
+              className={CG_BUTTON_REJECT}
               type="button"
               disabled={busy}
               onClick={() => void onAction({ type: "reject-offer" })}
             >
               Rechazar
             </button>
-            <button className="cg-button is-neutral" type="button" disabled={busy} onClick={onCounter}>
+            <button className={CG_BUTTON_NEUTRAL} type="button" disabled={busy} onClick={onCounter}>
               Contraofertar
             </button>
           </>
         )}
         {isOfferer && (
           <button
-            className="cg-button is-reject"
+            className={CG_BUTTON_REJECT}
             type="button"
             disabled={busy}
             onClick={() => void onAction({ type: "cancel-offer" })}

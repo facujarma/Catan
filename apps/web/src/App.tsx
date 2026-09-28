@@ -14,6 +14,7 @@ import {
   saveGuestName,
   saveRoomCode,
 } from "./identity";
+import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD } from "./ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "./model";
 
 export default function App() {
@@ -215,29 +216,76 @@ function CatanApp() {
     }
   };
 
+  const noticeBanner = (tone: "error" | "success") => {
+    const message = tone === "error" ? error : notice;
+    const palette =
+      tone === "error"
+        ? "border-[#edc4b9] bg-[#fff0eb] text-[#8a4033]"
+        : "border-[#c9ddbf] bg-[#eff7e9] text-[#426846]";
+    const dismiss = tone === "error" ? setError : setNotice;
+    return (
+      <div
+        className={`mx-auto mb-3.5 flex items-start justify-between gap-2.5 rounded-xl border px-3.5 py-[11px] text-[13px] ${palette}`}
+        role={tone === "error" ? "alert" : "status"}
+      >
+        {message}
+        <button className="border-0 bg-transparent text-[19px] leading-none" type="button" aria-label="Cerrar" onClick={() => dismiss("")}>
+          ×
+        </button>
+      </div>
+    );
+  };
+
   const frame = (content: ReactNode) => (
-    <div className="app-shell">
-      <header className="site-header">
-        <span className="brand-mark">C</span>
+    <div className="min-h-screen bg-[#12372a] bg-gradient-to-br from-[#17402f] via-[#12372a] to-[#0e2c21]">
+      <header className="mx-auto flex max-w-[1540px] items-center gap-3 px-6 pb-3.5 pt-[22px] text-[#f5f0df]">
+        <span className="inline-grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px] border border-[#e2bf6c]/70 bg-gradient-to-br from-[#e0bb67] to-[#a97232] text-[23px] font-black text-[#1c372a] shadow-[0_5px_12px_rgba(27,48,33,0.18)]">
+          C
+        </span>
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d1a64f]">Catan Online</p>
           <p className="text-sm text-[#d7e1d6]">Comerciá, construí, conquistá.</p>
         </div>
-        <span className="ml-auto hidden rounded-full border border-white/15 px-3 py-1 text-xs text-[#d8e4d7] sm:inline-flex">Partidas en tiempo real</span>
+        <span className="ml-auto hidden rounded-full border border-white/15 px-3 py-1 text-xs text-[#d8e4d7] sm:inline-flex">
+          Partidas en tiempo real
+        </span>
       </header>
-      <main className="app-content">
-        {error && <div className="notice notice-error" role="alert">{error}<button type="button" aria-label="Cerrar" onClick={() => setError("")}>×</button></div>}
-        {notice && <div className="notice notice-success" role="status">{notice}<button type="button" aria-label="Cerrar" onClick={() => setNotice("")}>×</button></div>}
+      <main className="mx-auto min-h-[calc(100vh-150px)] w-[min(100%-32px,1540px)] pb-[34px] pt-[18px]">
+        {error && noticeBanner("error")}
+        {notice && noticeBanner("success")}
         {content}
       </main>
-      <footer className="site-footer">Un juego de estrategia para construir juntos. <span>Hecho para jugar con amigos.</span></footer>
+      <footer className="flex flex-wrap justify-center gap-x-2 gap-y-[5px] p-[18px] text-[11px] text-[#8c8e80]">
+        Un juego de estrategia para construir juntos.{" "}
+        <span className="text-[#a8a696]">Hecho para jugar con amigos.</span>
+      </footer>
     </div>
   );
 
   const gameFrame = (content: ReactNode) => (
-    <div className="game-app-shell">
-      {error && <div className="game-toast game-toast-error" role="alert">{error}<button type="button" aria-label="Cerrar" onClick={() => setError("")}>×</button></div>}
-      {notice && <div className="game-toast game-toast-success" role="status">{notice}<button type="button" aria-label="Cerrar" onClick={() => setNotice("")}>×</button></div>}
+    <div className="relative h-dvh w-full overflow-hidden">
+      {error && (
+        <div
+          className="fixed right-4 top-16 z-[120] flex max-w-[min(520px,calc(100vw-32px))] items-start justify-between gap-2.5 rounded-xl border border-[#edc4b9] bg-[#fff0eb] px-3 py-2.5 text-xs text-[#8a4033] shadow-[0_10px_28px_rgba(10,30,45,0.28)]"
+          role="alert"
+        >
+          {error}
+          <button className="border-0 bg-transparent text-[17px] leading-none" type="button" aria-label="Cerrar" onClick={() => setError("")}>
+            ×
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div
+          className="fixed right-4 top-16 z-[120] flex max-w-[min(520px,calc(100vw-32px))] items-start justify-between gap-2.5 rounded-xl border border-[#c9ddbf] bg-[#eff7e9] px-3 py-2.5 text-xs text-[#426846] shadow-[0_10px_28px_rgba(10,30,45,0.28)]"
+          role="status"
+        >
+          {notice}
+          <button className="border-0 bg-transparent text-[17px] leading-none" type="button" aria-label="Cerrar" onClick={() => setNotice("")}>
+            ×
+          </button>
+        </div>
+      )}
       {content}
     </div>
   );
@@ -245,7 +293,11 @@ function CatanApp() {
   if (showDemo) return <DemoPreview onBack={() => setShowDemo(false)} />;
 
   if (roomCode && room === undefined) {
-    return frame(<div className="panel-card mx-auto max-w-md p-8 text-center text-[#687365]">Conectando con la sala…</div>);
+    return frame(
+      <div className={`${CARD} mx-auto max-w-md p-8 text-center text-[#687365]`}>
+        Conectando con la sala…
+      </div>,
+    );
   }
 
   if (roomCode && room) {
@@ -268,7 +320,9 @@ function CatanApp() {
       );
     }
 
-    if (!room.game) return gameFrame(<div className="panel-card p-8 text-center">Cargando partida…</div>);
+    if (!room.game) {
+      return gameFrame(<div className={`${CARD} m-6 p-8 text-center`}>Cargando partida…</div>);
+    }
     return gameFrame(
       <GameRoom
         room={room}
@@ -284,28 +338,38 @@ function CatanApp() {
   }
 
   return frame(
-    <section className="home-grid">
-      <div className="home-copy">
-        <p className="eyebrow text-[#dbb65f]">El clásico de estrategia, ahora online</p>
-        <h1>Un camino más.<br /><em>Una isla nueva.</em></h1>
-        <p className="home-description">Juntá recursos, negociá con tus amigos y conectá tus poblados. Sin cuentas: elegí un nombre y entrá a una sala.</p>
-        <div className="home-points">
-          <span>⌂ Tablero aleatorio</span><span>↗ 3–4 jugadores</span><span>◈ Reglas validadas en servidor</span>
+    <section className="mx-auto grid min-h-[min(72vh,680px)] max-w-[1180px] grid-cols-1 items-center gap-[clamp(32px,8vw,112px)] px-[18px] py-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+      <div>
+        <p className={`${EYEBROW} text-[#dbb65f]`}>El clásico de estrategia, ahora online</p>
+        <h1 className="mt-[18px] text-[clamp(3.15rem,7vw,6.8rem)] font-black leading-[0.97] tracking-[-0.065em] text-[#fff9e9] [text-wrap:balance]">
+          Un camino más.
+          <br />
+          <em className="not-italic text-[#e0bd6c]">Una isla nueva.</em>
+        </h1>
+        <p className="mt-6 max-w-[490px] text-base leading-[1.8] text-[#d4dfd4]">
+          Juntá recursos, negociá con tus amigos y conectá tus poblados. Sin cuentas: elegí un nombre y entrá a una sala.
+        </p>
+        <div className="mt-[30px] flex flex-wrap gap-[9px]">
+          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">⌂ Tablero aleatorio</span>
+          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">↗ 3–4 jugadores</span>
+          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">◈ Reglas validadas en servidor</span>
         </div>
       </div>
 
-      <div className="home-card panel-card">
+      <div className={`${CARD} px-[clamp(22px,4vw,34px)] py-[clamp(22px,4vw,34px)]`}>
         <div className="mb-5 flex gap-2 border-b border-[#ece5d7] pb-4">
-          <span className="home-card-icon">🎲</span>
+          <span className="grid h-[45px] w-[45px] shrink-0 place-items-center rounded-[15px] bg-[#f4ebd6] text-[23px]">🎲</span>
           <div>
-            <p className="eyebrow">Partida rápida</p>
+            <p className={EYEBROW}>Partida rápida</p>
             <h2 className="text-2xl font-black text-[#1d392b]">¿Cómo te llamamos?</h2>
           </div>
         </div>
-        <label className="field-label" htmlFor="guest-name">Nombre de jugador</label>
+        <label className="text-xs font-bold text-[#737b6e]" htmlFor="guest-name">
+          Nombre de jugador
+        </label>
         <input
           id="guest-name"
-          className="field-input mt-1.5 w-full"
+          className={`${FIELD} mt-1.5 w-full`}
           value={name}
           maxLength={24}
           autoComplete="nickname"
@@ -314,7 +378,7 @@ function CatanApp() {
         />
 
         <form className="mt-5" onSubmit={submitCreateRoom}>
-          <button className="button-primary w-full" type="submit" disabled={busy}>
+          <button className={`${BTN_PRIMARY} w-full`} type="submit" disabled={busy}>
             Crear una sala
           </button>
         </form>
@@ -325,16 +389,18 @@ function CatanApp() {
 
         <form className="flex gap-2" onSubmit={submitJoinRoom}>
           <input
-            className="field-input min-w-0 flex-1 font-mono uppercase tracking-[0.18em]"
+            className={`${FIELD} min-w-0 flex-1 font-mono uppercase tracking-[0.18em]`}
             aria-label="Código de sala"
             maxLength={4}
             placeholder="ABCD"
             value={joinCode}
             onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
           />
-          <button className="button-secondary" type="submit" disabled={busy}>Unirse</button>
+          <button className={BTN_SECONDARY} type="submit" disabled={busy}>
+            Unirse
+          </button>
         </form>
-        <button className="button-link mt-4 w-full" type="button" onClick={() => setShowDemo(true)}>
+        <button className={`${BTN_LINK} mt-4 w-full`} type="button" onClick={() => setShowDemo(true)}>
           Ver una partida de muestra
         </button>
         <p className="mt-4 text-center text-xs text-[#959487]">Tu identidad anónima se guarda en este navegador.</p>
@@ -345,14 +411,23 @@ function CatanApp() {
 
 function ConfigurationNotice({ onPreview }: { onPreview: () => void }) {
   return (
-    <div className="app-shell">
-      <header className="site-header"><span className="brand-mark">C</span><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d1a64f]">Catan Online</p></header>
-      <main className="app-content flex min-h-[70vh] items-center justify-center">
-        <section className="panel-card max-w-xl p-8">
-          <p className="eyebrow">Configuración necesaria</p>
+    <div className="min-h-screen bg-[#12372a] bg-gradient-to-br from-[#17402f] via-[#12372a] to-[#0e2c21]">
+      <header className="mx-auto flex max-w-[1540px] items-center gap-3 px-6 pb-3.5 pt-[22px] text-[#f5f0df]">
+        <span className="inline-grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px] border border-[#e2bf6c]/70 bg-gradient-to-br from-[#e0bb67] to-[#a97232] text-[23px] font-black text-[#1c372a] shadow-[0_5px_12px_rgba(27,48,33,0.18)]">
+          C
+        </span>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d1a64f]">Catan Online</p>
+      </header>
+      <main className="mx-auto flex min-h-[70vh] w-[min(100%-32px,1540px)] items-center justify-center">
+        <section className={`${CARD} max-w-xl p-8`}>
+          <p className={EYEBROW}>Configuración necesaria</p>
           <h1 className="mt-2 text-3xl font-black text-[#1f3c2e]">Conectá el proyecto Convex</h1>
-          <p className="mt-3 leading-7 text-[#6a7567]">Copiá <code>apps/web/.env.example</code> a <code>apps/web/.env.local</code>, agregá la URL de tu deployment y corré <code>bun run convex:dev</code>.</p>
-          <button className="button-primary mt-6" type="button" onClick={onPreview}>Ver una partida de muestra</button>
+          <p className="mt-3 leading-7 text-[#6a7567]">
+            Copiá <code>apps/web/.env.example</code> a <code>apps/web/.env.local</code>, agregá la URL de tu deployment y corré <code>bun run convex:dev</code>.
+          </p>
+          <button className={`${BTN_PRIMARY} mt-6`} type="button" onClick={onPreview}>
+            Ver una partida de muestra
+          </button>
         </section>
       </main>
     </div>

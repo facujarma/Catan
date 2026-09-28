@@ -4,7 +4,14 @@ import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/eng
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
-import { TradeComposer, TradeOfferPanel, RESOURCE_NAMES, RESOURCE_SYMBOLS } from "./TradePanels";
+import {
+  RESOURCE_CARD_TONES,
+  RESOURCE_NAMES,
+  RESOURCE_SYMBOLS,
+  TradeComposer,
+  TradeOfferPanel,
+} from "./TradePanels";
+import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "../model";
 
 interface GameRoomProps {
@@ -18,6 +25,11 @@ interface GameRoomProps {
   onLeave: () => void;
   onCopyInvite: () => void;
 }
+
+const MODAL_EYEBROW = "text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]";
+const MODAL_TITLE = "mt-1 text-[22px] font-black text-[#2c3c30]";
+const MODAL_CLOSE = "border-0 bg-transparent text-[22px] leading-none text-[#8b8271]";
+const MODAL_NOTE = "mt-2 text-xs leading-[1.5] text-ink-soft";
 
 export default function GameRoom({
   room,
@@ -187,30 +199,51 @@ export default function GameRoom({
   })();
 
   return (
-    <div className="cg-shell">
-      <header className="cg-topbar">
-        <div className="cg-topbar-left">
-          <span className="cg-logo">CATAN</span>
-          <span className="cg-room-chip">{room.code}</span>
-          <span className={`cg-phase-pill ${isMyTurn ? "is-mine" : "is-other"}`}>
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-gradient-to-b from-ocean-light via-ocean to-ocean-deep text-ink">
+      <header className="z-20 flex shrink-0 items-center justify-between gap-2.5 bg-[#0c2c42]/[0.8] px-3 py-1.5 shadow-[0_2px_8px_rgba(6,28,44,0.25)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[15px] font-black tracking-[0.2em] text-[#fdf6e3] [text-shadow:0_1px_0_rgba(0,0,0,0.35)]">
+            CATAN
+          </span>
+          <span className="rounded-full border border-white/25 px-2.5 py-[3px] font-mono text-[11px] tracking-[0.18em] text-[#d9ecf7]">
+            {room.code}
+          </span>
+          <span
+            className={`rounded-full px-2.5 py-[3px] text-[10px] font-extrabold uppercase tracking-[0.08em] ${
+              isMyTurn ? "bg-[#e7f6e2] text-[#2c6b34]" : "bg-white/[0.16] text-[#eaf4fb]"
+            }`}
+          >
             {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
           </span>
         </div>
-        <div className="cg-topbar-right">
+        <div className="flex items-center gap-2">
           {!demo && (
-            <button className="cg-ghost-button" type="button" onClick={onCopyInvite}>
+            <button
+              className="rounded-lg border border-white/[0.28] bg-[#0a263a]/40 px-2.5 py-[5px] text-[11px] font-semibold text-[#eaf4fb] enabled:hover:bg-[#0a263a]/70"
+              type="button"
+              onClick={onCopyInvite}
+            >
               ↗ Invitar
             </button>
           )}
-          <button className="cg-ghost-button" type="button" onClick={onLeave}>
+          <button
+            className="rounded-lg border border-white/[0.28] bg-[#0a263a]/40 px-2.5 py-[5px] text-[11px] font-semibold text-[#eaf4fb] enabled:hover:bg-[#0a263a]/70"
+            type="button"
+            onClick={onLeave}
+          >
             {demo ? "← Volver" : "× Salir"}
           </button>
         </div>
       </header>
 
-      <main className="cg-layout">
-        <aside className="cg-players" aria-label="Jugadores">
-          <h2 className="cg-players-title">Jugadores</h2>
+      <main className="grid min-h-0 flex-1 grid-cols-[232px_minmax(0,1fr)_288px] gap-2 overflow-hidden p-2 max-[1180px]:grid-cols-[204px_minmax(0,1fr)_244px] max-[940px]:grid-cols-1 max-[940px]:grid-rows-[auto_minmax(280px,1fr)_minmax(150px,240px)]">
+        <aside
+          className="flex min-h-0 flex-col gap-1.5 overflow-x-hidden overflow-y-auto max-[940px]:flex-row max-[940px]:overflow-x-auto max-[940px]:overflow-y-hidden"
+          aria-label="Jugadores"
+        >
+          <h2 className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/80 max-[940px]:hidden">
+            Jugadores
+          </h2>
           {otherPlayers.map((player) => (
             <PlayerPanel
               key={player.id}
@@ -232,7 +265,7 @@ export default function GameRoom({
           )}
         </aside>
 
-        <section className="cg-board-area">
+        <section className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12),0_6px_20px_rgba(7,30,48,0.25)]">
           <BoardSvg
             game={game}
             legal={demo ? emptyLegalPlacements : room.legal}
@@ -255,24 +288,33 @@ export default function GameRoom({
           )}
 
           {!demo && hint && (
-            <div className="cg-board-hint">
+            <div className="absolute bottom-3 left-1/2 z-30 max-w-[min(560px,calc(100%-24px))] -translate-x-1/2 rounded-[10px] bg-[#0e3046]/[0.88] px-3.5 py-2 text-center text-xs font-semibold text-[#f4f9fd] shadow-[0_4px_14px_rgba(5,25,40,0.35)]">
               {hint}
               {selectedCard?.type === "road-building" && (
                 <>
                   <button
+                    className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
                     type="button"
                     disabled={busy || selectedRoadIds.length === 0}
                     onClick={playRoadBuilding}
                   >
                     Colocar
                   </button>
-                  <button type="button" onClick={resetSelection}>
+                  <button
+                    className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
+                    type="button"
+                    onClick={resetSelection}
+                  >
                     Cancelar
                   </button>
                 </>
               )}
               {selectedCard?.type === "knight" && (
-                <button type="button" onClick={resetSelection}>
+                <button
+                  className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
+                  type="button"
+                  onClick={resetSelection}
+                >
                   Cancelar
                 </button>
               )}
@@ -280,36 +322,43 @@ export default function GameRoom({
           )}
 
           {game.phase === "finished" && (
-            <div className="cg-winner-banner">
-              <div className="cg-winner-card">
-                <h2>
+            <div className="absolute inset-0 z-40 grid place-items-center bg-[#082234]/[0.55]">
+              <div className="rounded-2xl bg-paper-soft px-8 py-5 text-center shadow-[0_18px_50px_rgba(5,22,36,0.45)]">
+                <h2 className="text-[26px] font-black text-[#2d5c33]">
                   {game.winnerId === room.selfPlayerId
                     ? "¡Ganaste la partida!"
                     : `Ganó ${game.players.find((player) => player.id === game.winnerId)?.name ?? "un jugador"}`}
                 </h2>
-                <p>10 puntos de victoria</p>
+                <p className="mt-1.5 text-[13px] text-ink-soft">10 puntos de victoria</p>
               </div>
             </div>
           )}
         </section>
 
-        <aside className="cg-right">
+        <aside className="flex min-h-0 flex-col gap-2 overflow-hidden">
           <FeedPanel
             messages={messages}
             events={events}
             disabled={busy || demo}
             onSend={onSendMessage}
           />
-          <section className="cg-bank" aria-label="Banco">
-            <div className="cg-bank-title">
+          <section
+            className="shrink-0 rounded-xl border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_4px_14px_rgba(8,30,48,0.22)]"
+            aria-label="Banco"
+          >
+            <div className="mb-1.5 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-soft">
               <span>Banco</span>
               <span>Cartas restantes</span>
             </div>
-            <div className="cg-bank-row">
+            <div className="flex gap-1.5">
               {RESOURCES.map((resource) => (
-                <div className="cg-bank-item" key={resource} title={RESOURCE_NAMES[resource]}>
-                  <span>{RESOURCE_SYMBOLS[resource]}</span>
-                  <b>{game.bank[resource]}</b>
+                <div
+                  className="flex flex-1 flex-col items-center gap-0.5 rounded-lg bg-[#f2ead7] px-0.5 py-[5px]"
+                  key={resource}
+                  title={RESOURCE_NAMES[resource]}
+                >
+                  <span className="text-sm">{RESOURCE_SYMBOLS[resource]}</span>
+                  <b className="text-[11px]">{game.bank[resource]}</b>
                 </div>
               ))}
             </div>
@@ -317,10 +366,10 @@ export default function GameRoom({
         </aside>
       </main>
 
-      <footer className="cg-dock">
+      <footer className="z-[25] shrink-0 px-2 pb-2">
         {demo ? (
-          <div className="cg-dock-inner cg-dock-demo">
-            <p className="cg-status-note">
+          <div className="flex items-center justify-center rounded-[14px] border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_-2px_14px_rgba(8,30,48,0.25)]">
+            <p className="max-w-[560px] text-center text-[10px] text-[#8b8271]">
               Vista de muestra: así se ve una partida con el comercio global y el tablero al estilo Colonist.
             </p>
           </div>
@@ -349,26 +398,28 @@ export default function GameRoom({
       )}
 
       {!demo && selectedCard?.type === "monopoly" && (
-        <div className="cg-modal-backdrop" role="presentation">
-          <section className="cg-modal" role="dialog" aria-modal="true" aria-labelledby="monopoly-title">
-            <div className="cg-modal-head">
+        <div className={MODAL_BACKDROP} role="presentation">
+          <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="monopoly-title">
+            <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className="cg-modal-eyebrow">Carta de desarrollo</p>
-                <h2 id="monopoly-title">Monopolio</h2>
+                <p className={MODAL_EYEBROW}>Carta de desarrollo</p>
+                <h2 id="monopoly-title" className={MODAL_TITLE}>
+                  Monopolio
+                </h2>
               </div>
-              <button className="cg-modal-close" type="button" aria-label="Cerrar" onClick={resetSelection}>
+              <button className={MODAL_CLOSE} type="button" aria-label="Cerrar" onClick={resetSelection}>
                 ×
               </button>
             </div>
-            <p className="cg-modal-note">
+            <p className={MODAL_NOTE}>
               Elegí un recurso. Todos los demás jugadores te entregarán las cartas de ese tipo que tengan.
             </p>
-            <div className="cg-trade-cards" style={{ marginTop: 16 }}>
+            <div className="mt-4 flex flex-wrap gap-[7px]">
               {RESOURCES.map((resource) => (
                 <button
                   key={resource}
                   type="button"
-                  className={`cg-res-card is-${resource} is-picked`}
+                  className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} outline outline-[3px] outline-offset-1 outline-catan-gold disabled:opacity-50`}
                   title={RESOURCE_NAMES[resource]}
                   disabled={busy}
                   onClick={() => playMonopoly(resource)}
@@ -382,53 +433,61 @@ export default function GameRoom({
       )}
 
       {!demo && selectedCard?.type === "year-of-plenty" && (
-        <div className="cg-modal-backdrop" role="presentation">
-          <section className="cg-modal" role="dialog" aria-modal="true" aria-labelledby="plenty-title">
-            <div className="cg-modal-head">
+        <div className={MODAL_BACKDROP} role="presentation">
+          <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="plenty-title">
+            <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className="cg-modal-eyebrow">Carta de desarrollo</p>
-                <h2 id="plenty-title">Año de la abundancia</h2>
+                <p className={MODAL_EYEBROW}>Carta de desarrollo</p>
+                <h2 id="plenty-title" className={MODAL_TITLE}>
+                  Año de la abundancia
+                </h2>
               </div>
-              <button className="cg-modal-close" type="button" aria-label="Cerrar" onClick={resetSelection}>
+              <button className={MODAL_CLOSE} type="button" aria-label="Cerrar" onClick={resetSelection}>
                 ×
               </button>
             </div>
-            <p className="cg-modal-note">
+            <p className={MODAL_NOTE}>
               Elegí {requiredPlentyCards} recurso{requiredPlentyCards === 1 ? "" : "s"} del banco.
               Seleccionados: {plentyResources.length}/{requiredPlentyCards}.
             </p>
-            <div className="cg-trade-cards" style={{ marginTop: 16 }}>
+            <div className="mt-4 flex flex-wrap gap-[7px]">
               {RESOURCES.map((resource) => {
                 const selectedCount = plentyResources.filter((candidate) => candidate === resource).length;
                 return (
                   <button
                     key={resource}
                     type="button"
-                    className={`cg-res-card is-${resource} ${selectedCount > 0 ? "is-picked" : ""}`}
+                    className={`relative inline-flex h-[42px] w-[52px] items-center justify-center rounded-[7px] border border-black/[0.28] text-lg text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                      selectedCount > 0 ? "outline outline-[3px] outline-offset-1 outline-catan-gold" : ""
+                    } disabled:opacity-50`}
                     title={`Banco: ${game.bank[resource]}`}
                     disabled={busy || game.bank[resource] === 0}
                     onClick={() => togglePlentyResource(resource)}
                   >
                     {RESOURCE_SYMBOLS[resource]}
-                    {selectedCount > 0 && <span className="cg-res-count">{selectedCount}</span>}
+                    {selectedCount > 0 && (
+                      <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white [text-shadow:none]">
+                        {selectedCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
-            <div className="cg-modal-actions">
+            <div className={MODAL_ACTIONS}>
               <button
-                className="cg-button is-neutral"
+                className={CG_BUTTON_NEUTRAL}
                 type="button"
                 disabled={plentyResources.length === 0}
                 onClick={() => setPlentyResources((current) => current.slice(0, -1))}
               >
                 Deshacer
               </button>
-              <button className="cg-button is-neutral" type="button" onClick={resetSelection}>
+              <button className={CG_BUTTON_NEUTRAL} type="button" onClick={resetSelection}>
                 Cancelar
               </button>
               <button
-                className="cg-button is-accept"
+                className={CG_BUTTON_ACCEPT}
                 type="button"
                 disabled={busy || plentyResources.length !== requiredPlentyCards || requiredPlentyCards === 0}
                 onClick={playYearOfPlenty}
@@ -441,23 +500,30 @@ export default function GameRoom({
       )}
 
       {!demo && pendingRobberHexId && (
-        <div className="cg-modal-backdrop" role="presentation">
-          <section className="cg-modal" role="dialog" aria-modal="true" aria-labelledby="victim-title">
-            <div className="cg-modal-head">
+        <div className={MODAL_BACKDROP} role="presentation">
+          <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="victim-title">
+            <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className="cg-modal-eyebrow">Ladrón en {robberTargetName}</p>
-                <h2 id="victim-title">Elegí a quién robar</h2>
+                <p className={MODAL_EYEBROW}>Ladrón en {robberTargetName}</p>
+                <h2 id="victim-title" className={MODAL_TITLE}>
+                  Elegí a quién robar
+                </h2>
               </div>
-              <button className="cg-modal-close" type="button" aria-label="Cerrar" onClick={() => setPendingRobberHexId(null)}>
+              <button
+                className={MODAL_CLOSE}
+                type="button"
+                aria-label="Cerrar"
+                onClick={() => setPendingRobberHexId(null)}
+              >
                 ×
               </button>
             </div>
-            <p className="cg-modal-note">Hay varios rivales con construcciones junto a este territorio.</p>
-            <div className="cg-offer-actions" style={{ paddingLeft: 0, paddingRight: 0 }}>
+            <p className={MODAL_NOTE}>Hay varios rivales con construcciones junto a este territorio.</p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
               {eligibleVictims.map((player) => (
                 <button
                   key={player.id}
-                  className="cg-button is-neutral"
+                  className={CG_BUTTON_NEUTRAL}
                   type="button"
                   disabled={busy}
                   onClick={() => void submitRobberMove(pendingRobberHexId, player.id)}
@@ -494,43 +560,61 @@ function PlayerPanel({
 }) {
   const lobbyPlayer = room.players.find((candidate) => candidate.id === player.id);
   const points = self ? totalPoints ?? player.publicVictoryPoints : player.publicVictoryPoints;
+  const offline = Boolean(lobbyPlayer && !lobbyPlayer.online);
+  const tone = player.isCurrentPlayer
+    ? `border-[#ffd76a] ring-2 ring-[#ffd76a]/55 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.94]"}`
+    : `border-black/15 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.92]"}`;
+
   return (
     <article
-      className={`cg-player ${player.isCurrentPlayer ? "is-current" : ""} ${self ? "is-self" : ""} ${
-        lobbyPlayer && !lobbyPlayer.online ? "is-offline" : ""
+      className={`relative flex items-center gap-2 rounded-[10px] border px-2 py-[7px] shadow-[0_2px_6px_rgba(10,35,55,0.18)] max-[940px]:min-w-[190px] ${tone} ${
+        offline ? "opacity-70" : ""
       }`}
     >
-      <span className="cg-player-avatar" style={{ backgroundColor: player.color }}>
+      <span
+        className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border-2 border-white/85 text-xs font-black text-white shadow-[0_2px_5px_rgba(0,0,0,0.25)] [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]"
+        style={{ backgroundColor: player.color }}
+      >
         {player.name.slice(0, 2).toUpperCase()}
       </span>
-      <div className="cg-player-body">
-        <div className="cg-player-top">
-          <strong className="cg-player-name">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-1.5">
+          <strong className="block truncate text-xs font-extrabold text-[#33302a]">
             {player.name}
             {self ? " (vos)" : ""}
           </strong>
-          <span className="cg-vp">🏅 {points}</span>
+          <span className="inline-flex items-center gap-[3px] rounded-full bg-[#f3e3b8] px-[7px] py-px text-[11px] font-black text-[#7a5a12]">
+            🏅 {points}
+          </span>
         </div>
-        <div className="cg-player-meta">
+        <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[#7a7364]">
           <span>
-            🎴 <b>{player.resourceCardCount}</b>
+            🎴 <b className="font-extrabold text-[#4c463a]">{player.resourceCardCount}</b>
           </span>
           <span>
-            🃏 <b>{player.developmentCardCount}</b>
+            🃏 <b className="font-extrabold text-[#4c463a]">{player.developmentCardCount}</b>
           </span>
           <span>
-            ⚔ <b>{player.playedKnights}</b>
+            ⚔ <b className="font-extrabold text-[#4c463a]">{player.playedKnights}</b>
           </span>
           <span>
-            🛤 <b>{player.roadsBuilt}</b>
+            🛤 <b className="font-extrabold text-[#4c463a]">{player.roadsBuilt}</b>
           </span>
-          {lobbyPlayer && !lobbyPlayer.online && <span className="cg-player-offline-dot">Desconectado</span>}
+          {offline && <span className="text-[9px] font-bold text-[#a2564a]">Desconectado</span>}
         </div>
       </div>
       {(longestRoad || largestArmy) && (
-        <div className="cg-badges">
-          {longestRoad && <span className="cg-badge cg-badge-road">Camino</span>}
-          {largestArmy && <span className="cg-badge cg-badge-army">Ejército</span>}
+        <div className="flex flex-col gap-0.5">
+          {longestRoad && (
+            <span className="rounded-md bg-[#e2ecd6] px-[5px] py-0.5 text-center text-[9px] font-black text-[#3f6b3a]">
+              Camino
+            </span>
+          )}
+          {largestArmy && (
+            <span className="rounded-md bg-[#f0e0d6] px-[5px] py-0.5 text-center text-[9px] font-black text-[#92472f]">
+              Ejército
+            </span>
+          )}
         </div>
       )}
     </article>

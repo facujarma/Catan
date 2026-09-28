@@ -238,9 +238,9 @@ export default function BoardSvg({
   const coastPath = coastlinePath(game);
 
   return (
-    <div className="board-frame">
+    <div className="flex h-full w-full items-center justify-center overflow-hidden">
       <svg
-        className="board-svg"
+        className="block h-full w-full"
         viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
         role="img"
         aria-label="Tablero de Catan"
@@ -486,13 +486,6 @@ export default function BoardSvg({
           );
         })}
       </svg>
-      <div className="board-legend" aria-hidden="true">
-        <span><i className="terrain-dot bg-[#5c974d]" />Bosque</span>
-        <span><i className="terrain-dot bg-[#bd694f]" />Ladrillo</span>
-        <span><i className="terrain-dot bg-[#9aba70]" />Oveja</span>
-        <span><i className="terrain-dot bg-[#d7b84d]" />Trigo</span>
-        <span><i className="terrain-dot bg-[#8b9294]" />Mineral</span>
-      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ export default function DemoPreview({ onBack }: { onBack: () => void }) {
   const demo = useMemo(createDemoSnapshot, []);
 
   return (
-    <div className="game-app-shell">
+    <div className="relative h-dvh w-full overflow-hidden">
       <GameRoom
         room={demo.room}
         messages={demo.messages}

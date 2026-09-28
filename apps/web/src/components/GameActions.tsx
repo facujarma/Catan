@@ -7,10 +7,12 @@ import type { GameActionPayload, RoomSnapshot } from "../model";
 import {
   bundleTotal,
   emptyBundle,
+  RESOURCE_CARD_TONES,
   RESOURCE_NAMES,
   RESOURCE_SYMBOLS,
   ResourceCard,
 } from "./TradePanels";
+import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 
 interface GameActionsProps {
   room: RoomSnapshot;
@@ -41,6 +43,18 @@ const PHASE_LABEL: Record<string, string> = {
   trade: "Comercio en curso",
   finished: "Partida terminada",
 };
+
+function actionButtonClass(variant: "default" | "active" | "primary"): string {
+  const base =
+    "relative flex min-h-[52px] flex-col items-center justify-center gap-px rounded-[10px] border px-1 py-[5px] transition disabled:opacity-50";
+  if (variant === "primary") {
+    return `${base} border-[#2c7f3c] bg-gradient-to-b from-[#4cae5c] to-[#2f9e44] text-white shadow-[0_2px_0_#237a34] enabled:hover:brightness-105`;
+  }
+  if (variant === "active") {
+    return `${base} border-[#d0a437] bg-gradient-to-b from-[#fdf0c4] to-[#f5dd9a] text-[#4d4738] shadow-[0_2px_0_#c9bda2] ring-2 ring-[#d0a437]/45 enabled:hover:brightness-105`;
+  }
+  return `${base} border-[#cfc5ae] bg-gradient-to-b from-[#fdf8ec] to-[#efe5cf] text-[#4d4738] shadow-[0_2px_0_#c9bda2] enabled:hover:brightness-105`;
+}
 
 export default function GameActions({
   room,
@@ -115,15 +129,23 @@ export default function GameActions({
   const settlementsLeft = 5 - (selfPlayer?.settlementsBuilt ?? 0);
   const citiesLeft = 4 - (selfPlayer?.citiesBuilt ?? 0);
 
+  const actionIcon = "text-lg leading-none";
+  const actionLabel = "text-[10px] font-extrabold";
+  const actionCount =
+    "absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[10px] font-black text-white";
+  const actionCost = "text-[8px] text-[#8b8271]";
+
   return (
     <>
-      <div className="cg-dock-inner">
-        <section className="cg-hand" aria-label="Tu mano">
-          <div className="cg-hand-title">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 rounded-[14px] border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_-2px_14px_rgba(8,30,48,0.25)] max-[940px]:max-h-[320px] max-[940px]:grid-cols-1 max-[940px]:overflow-y-auto">
+        <section className="flex min-w-0 flex-col justify-center gap-1.5" aria-label="Tu mano">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-soft">
             Tu mano
-            <small>{bundleTotal(game.self.resources)} recursos</small>
+            <small className="text-[9px] font-normal normal-case tracking-normal text-[#9a9384]">
+              {bundleTotal(game.self.resources)} recursos
+            </small>
           </div>
-          <div className="cg-hand-row">
+          <div className="flex flex-wrap gap-2">
             {RESOURCES.map((resource) => (
               <ResourceCard
                 key={resource}
@@ -133,13 +155,18 @@ export default function GameActions({
             ))}
           </div>
           {game.self.developmentCards.length > 0 && (
-            <div className="cg-dev-row">
+            <div className="flex flex-wrap gap-1.5">
               {game.self.developmentCards.map((card) => {
                 const playable = isCardPlayable(card);
+                const selected = selectedCard?.id === card.id;
                 return (
                   <span
                     key={card.id}
-                    className={`cg-dev-card ${selectedCard?.id === card.id ? "is-selected" : ""} ${playable ? "is-playable" : ""}`}
+                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 py-[3px] text-[10px] font-bold text-[#5a5140] ${
+                      selected
+                        ? "border-[#c99b2f] bg-[#fbeec4]"
+                        : "border-line bg-[#f4ecda]"
+                    } ${playable ? "ring-1 ring-catan-green/50" : ""}`}
                   >
                     {CARD_NAMES[card.type]}
                     {card.type === "victory-point" ? (
@@ -148,6 +175,7 @@ export default function GameActions({
                       <small>Nueva</small>
                     ) : (
                       <button
+                        className="rounded-md border-0 bg-catan-green px-1.5 py-0.5 text-[9px] font-extrabold text-white disabled:opacity-50"
                         type="button"
                         disabled={!playable || busy}
                         onClick={() => onSelectedCard(card)}
@@ -161,128 +189,160 @@ export default function GameActions({
             </div>
           )}
           {game.playedDevelopmentCardThisTurn && (
-            <p className="cg-dev-hint">Ya jugaste una carta de desarrollo este turno.</p>
+            <p className="text-[10px] text-[#9a9384]">
+              Ya jugaste una carta de desarrollo este turno.
+            </p>
           )}
         </section>
 
-        <section className="cg-status" aria-label="Estado del turno">
-          <div className="cg-status-player">
-            <i style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }} />
+        <section
+          className="flex min-w-[210px] flex-col items-center justify-center gap-1 border-x border-line px-3.5 max-[1180px]:min-w-[170px] max-[1180px]:px-2 max-[940px]:min-w-0 max-[940px]:border-x-0 max-[940px]:border-y max-[940px]:border-line max-[940px]:py-2"
+          aria-label="Estado del turno"
+        >
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#4d4738]">
+            <i
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }}
+            />
             {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
           </div>
-          <div className="cg-dice">
-            <span className={`cg-die ${game.lastRoll ? "" : "is-empty"}`}>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`grid h-[30px] w-[30px] place-items-center rounded-[7px] border border-[#cfc5ae] bg-white text-[15px] font-black shadow-[0_2px_2px_rgba(0,0,0,0.12)] ${
+                game.lastRoll ? "text-[#33302a]" : "text-[#c8c1b0]"
+              }`}
+            >
               {game.lastRoll ? game.lastRoll.dice[0] : "·"}
             </span>
-            <span className={`cg-die ${game.lastRoll ? "" : "is-empty"}`}>
+            <span
+              className={`grid h-[30px] w-[30px] place-items-center rounded-[7px] border border-[#cfc5ae] bg-white text-[15px] font-black shadow-[0_2px_2px_rgba(0,0,0,0.12)] ${
+                game.lastRoll ? "text-[#33302a]" : "text-[#c8c1b0]"
+              }`}
+            >
               {game.lastRoll ? game.lastRoll.dice[1] : "·"}
             </span>
           </div>
           {isMyTurn && game.phase === "awaiting-roll" ? (
-            <button className="cg-roll-button" type="button" disabled={busy} onClick={() => void onAction({ type: "roll" })}>
+            <button
+              className="rounded-[9px] border-0 bg-catan-green px-[18px] py-[7px] text-xs font-black text-white shadow-[0_3px_0_#237a34] active:translate-y-px active:shadow-[0_2px_0_#237a34] disabled:opacity-50"
+              type="button"
+              disabled={busy}
+              onClick={() => void onAction({ type: "roll" })}
+            >
               🎲 Tirar dados
             </button>
           ) : (
-            <p className="cg-status-note">
+            <p className="max-w-[240px] text-center text-[10px] text-[#8b8271]">
               {PHASE_LABEL[game.phase] ?? game.phase}
               {game.phase === "trade" && !isMyTurn ? " · esperando al oferente" : ""}
             </p>
           )}
         </section>
 
-        <section className="cg-actions" aria-label="Acciones">
+        <section
+          className="grid grid-cols-[repeat(3,minmax(74px,96px))] justify-end gap-1.5 max-[1180px]:grid-cols-[repeat(3,minmax(64px,82px))] max-[940px]:grid-cols-3 max-[940px]:justify-stretch"
+          aria-label="Acciones"
+        >
           <button
-            className="cg-action-button"
+            className={actionButtonClass("default")}
             type="button"
             disabled={busy || !isMainTurn}
             onClick={onOpenTrade}
           >
-            <span className="cg-action-icon">⇄</span>
-            <span className="cg-action-label">Comercio</span>
+            <span className={actionIcon}>⇄</span>
+            <span className={actionLabel}>Comercio</span>
           </button>
           <button
-            className="cg-action-button"
+            className={actionButtonClass("default")}
             type="button"
             disabled={busy || !isMainTurn}
             onClick={() => void onAction({ type: "buy-development-card" })}
           >
-            <span className="cg-action-icon">🃏</span>
-            <span className="cg-action-label">Desarrollo</span>
-            <span className="cg-action-cost">🐑🌾⛰️</span>
+            <span className={actionIcon}>🃏</span>
+            <span className={actionLabel}>Desarrollo</span>
+            <span className={actionCost}>🐑🌾⛰️</span>
           </button>
           <button
-            className={`cg-action-button ${mode === "road" ? "is-active" : ""}`}
+            className={actionButtonClass(mode === "road" ? "active" : "default")}
             type="button"
             disabled={busy || !isMainTurn || room.legal.roadIds.length === 0}
             onClick={() => toggleMode("road")}
           >
-            <span className="cg-action-icon">🛤️</span>
-            <span className="cg-action-label">Camino</span>
-            <span className="cg-action-cost">🌲🧱</span>
-            <span className="cg-action-count">{roadsLeft}</span>
+            <span className={actionIcon}>🛤️</span>
+            <span className={actionLabel}>Camino</span>
+            <span className={actionCost}>🌲🧱</span>
+            <span className={actionCount}>{roadsLeft}</span>
           </button>
           <button
-            className={`cg-action-button ${mode === "settlement" ? "is-active" : ""}`}
+            className={actionButtonClass(mode === "settlement" ? "active" : "default")}
             type="button"
             disabled={busy || !isMainTurn || room.legal.settlementVertexIds.length === 0}
             onClick={() => toggleMode("settlement")}
           >
-            <span className="cg-action-icon">🏠</span>
-            <span className="cg-action-label">Poblado</span>
-            <span className="cg-action-cost">🌲🧱🐑🌾</span>
-            <span className="cg-action-count">{settlementsLeft}</span>
+            <span className={actionIcon}>🏠</span>
+            <span className={actionLabel}>Poblado</span>
+            <span className={actionCost}>🌲🧱🐑🌾</span>
+            <span className={actionCount}>{settlementsLeft}</span>
           </button>
           <button
-            className={`cg-action-button ${mode === "city" ? "is-active" : ""}`}
+            className={actionButtonClass(mode === "city" ? "active" : "default")}
             type="button"
             disabled={busy || !isMainTurn || room.legal.cityVertexIds.length === 0}
             onClick={() => toggleMode("city")}
           >
-            <span className="cg-action-icon">🏰</span>
-            <span className="cg-action-label">Ciudad</span>
-            <span className="cg-action-cost">🌾🌾⛰️⛰️⛰️</span>
-            <span className="cg-action-count">{citiesLeft}</span>
+            <span className={actionIcon}>🏰</span>
+            <span className={actionLabel}>Ciudad</span>
+            <span className={actionCost}>🌾🌾⛰️⛰️⛰️</span>
+            <span className={actionCount}>{citiesLeft}</span>
           </button>
           <button
-            className="cg-action-button"
+            className={actionButtonClass("default")}
             type="button"
             disabled={busy || !isMainTurn}
             onClick={() => setMaritimeOpen(true)}
           >
-            <span className="cg-action-icon">⚓</span>
-            <span className="cg-action-label">Banco</span>
-            <span className="cg-action-cost">{room.legal.tradeRatios[giveResource]}:1</span>
+            <span className={actionIcon}>⚓</span>
+            <span className={actionLabel}>Banco</span>
+            <span className={actionCost}>{room.legal.tradeRatios[giveResource]}:1</span>
           </button>
           <button
-            className="cg-action-button is-primary"
+            className={actionButtonClass("primary")}
             type="button"
             disabled={busy || !isMainTurn}
             onClick={() => void onAction({ type: "end-turn" })}
           >
-            <span className="cg-action-icon">⏳</span>
-            <span className="cg-action-label">Terminar turno</span>
+            <span className={actionIcon}>⏳</span>
+            <span className={actionLabel}>Terminar turno</span>
           </button>
         </section>
       </div>
 
       {game.phase === "discard" && pendingCount > 0 && (
-        <div className="cg-modal-backdrop" role="presentation">
-          <section className="cg-modal" role="dialog" aria-modal="true" aria-labelledby="discard-title">
-            <div className="cg-modal-head">
-              <div>
-                <p className="cg-modal-eyebrow">Salió un siete</p>
-                <h2 id="discard-title">Descartá {pendingCount} cartas</h2>
-              </div>
+        <div className={MODAL_BACKDROP} role="presentation">
+          <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="discard-title">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
+                Salió un siete
+              </p>
+              <h2 id="discard-title" className="mt-1 text-[22px] font-black text-[#2c3c30]">
+                Descartá {pendingCount} cartas
+              </h2>
             </div>
-            <p className="cg-modal-note">Elegí qué recursos devolver al banco para poder mover al ladrón.</p>
+            <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
+              Elegí qué recursos devolver al banco para poder mover al ladrón.
+            </p>
             <div className="mt-3">
               {RESOURCES.map((resource) => (
-                <label key={resource} className="cg-discard-row">
+                <label
+                  key={resource}
+                  className="mt-1.5 flex items-center justify-between gap-2 text-xs"
+                >
                   <span>
                     {RESOURCE_SYMBOLS[resource]} {RESOURCE_NAMES[resource]}{" "}
                     <small>({game.self.resources[resource]})</small>
                   </span>
                   <input
+                    className="w-[58px] rounded-[7px] border border-line px-[7px] py-[5px] text-center font-bold"
                     type="number"
                     min={0}
                     max={game.self.resources[resource]}
@@ -300,15 +360,21 @@ export default function GameActions({
                 </label>
               ))}
             </div>
-            <div className={`cg-discard-total ${discardTotal === pendingCount ? "is-ok" : "is-bad"}`}>
+            <div
+              className={`mt-3 text-xs font-bold ${
+                discardTotal === pendingCount ? "text-[#2f6b34]" : "text-catan-red-dark"
+              }`}
+            >
               Seleccionadas: {discardTotal} / {pendingCount}
             </div>
             {discardSubmitted && discardTotal !== pendingCount && (
-              <p className="cg-modal-note">Elegí exactamente {pendingCount} cartas.</p>
+              <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
+                Elegí exactamente {pendingCount} cartas.
+              </p>
             )}
-            <div className="cg-modal-actions">
+            <div className={MODAL_ACTIONS}>
               <button
-                className="cg-button is-accept"
+                className={CG_BUTTON_ACCEPT}
                 type="button"
                 disabled={busy || discardTotal !== pendingCount}
                 onClick={submitDiscard}
@@ -321,33 +387,48 @@ export default function GameActions({
       )}
 
       {maritimeOpen && isMainTurn && (
-        <div className="cg-modal-backdrop" role="presentation" onClick={() => setMaritimeOpen(false)}>
+        <div className={MODAL_BACKDROP} role="presentation" onClick={() => setMaritimeOpen(false)}>
           <section
-            className="cg-modal"
+            className={MODAL}
             role="dialog"
             aria-modal="true"
             aria-labelledby="maritime-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="cg-modal-head">
+            <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className="cg-modal-eyebrow">Comercio marítimo</p>
-                <h2 id="maritime-title">Intercambiar con el banco</h2>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
+                  Comercio marítimo
+                </p>
+                <h2 id="maritime-title" className="mt-1 text-[22px] font-black text-[#2c3c30]">
+                  Intercambiar con el banco
+                </h2>
               </div>
-              <button className="cg-modal-close" type="button" aria-label="Cerrar" onClick={() => setMaritimeOpen(false)}>
+              <button
+                className="border-0 bg-transparent text-[22px] leading-none text-[#8b8271]"
+                type="button"
+                aria-label="Cerrar"
+                onClick={() => setMaritimeOpen(false)}
+              >
                 ×
               </button>
             </div>
             <form onSubmit={submitMaritimeTrade}>
-              <div className="cg-trade-grid">
-                <div className="cg-trade-section">
-                  <span>Entregás</span>
-                  <div className="cg-trade-cards">
+              <div className="mt-3.5 grid grid-cols-1 items-center gap-2 min-[560px]:grid-cols-[1fr_26px_1fr]">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
+                    Entregás
+                  </span>
+                  <div className="flex flex-wrap gap-[7px]">
                     {RESOURCES.map((resource) => (
                       <button
                         key={resource}
                         type="button"
-                        className={`cg-res-card is-small is-${resource} ${giveResource === resource ? "is-picked" : ""}`}
+                        className={`relative inline-flex h-[34px] w-[42px] items-center justify-center rounded-[7px] border border-black/[0.28] text-[15px] text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                          giveResource === resource
+                            ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                            : ""
+                        }`}
                         title={RESOURCE_NAMES[resource]}
                         onClick={() => setGiveResource(resource)}
                       >
@@ -356,25 +437,32 @@ export default function GameActions({
                     ))}
                   </div>
                   <input
-                    className="cg-feed-input"
+                    className="min-h-[42px] rounded-xl border border-line bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-ocean/40"
                     type="number"
                     min={1}
                     value={giveAmount}
                     onChange={(event) => setGiveAmount(event.target.value)}
                   />
-                  <small className="cg-dev-hint">
-                    Tasa {room.legal.tradeRatios[giveResource]}:1 para {RESOURCE_NAMES[giveResource]}
+                  <small className="text-[10px] text-[#9a9384]">
+                    Tasa {room.legal.tradeRatios[giveResource]}:1 para{" "}
+                    {RESOURCE_NAMES[giveResource]}
                   </small>
                 </div>
-                <div className="cg-trade-arrow">⇄</div>
-                <div className="cg-trade-section">
-                  <span>Recibís</span>
-                  <div className="cg-trade-cards">
+                <div className="text-center text-xl font-black text-[#a59a82]">⇄</div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
+                    Recibís
+                  </span>
+                  <div className="flex flex-wrap gap-[7px]">
                     {RESOURCES.filter((resource) => resource !== giveResource).map((resource) => (
                       <button
                         key={resource}
                         type="button"
-                        className={`cg-res-card is-small is-${resource} ${wantResource === resource ? "is-picked" : ""}`}
+                        className={`relative inline-flex h-[34px] w-[42px] items-center justify-center rounded-[7px] border border-black/[0.28] text-[15px] text-white shadow-[0_2px_4px_rgba(0,0,0,0.22)] [text-shadow:0_1px_2px_rgba(0,0,0,0.35)] ${RESOURCE_CARD_TONES[resource]} ${
+                          wantResource === resource
+                            ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                            : ""
+                        }`}
                         title={RESOURCE_NAMES[resource]}
                         onClick={() => setWantResource(resource)}
                       >
@@ -384,12 +472,16 @@ export default function GameActions({
                   </div>
                 </div>
               </div>
-              <div className="cg-modal-actions">
-                <button className="cg-button is-neutral" type="button" onClick={() => setMaritimeOpen(false)}>
+              <div className={MODAL_ACTIONS}>
+                <button
+                  className={CG_BUTTON_NEUTRAL}
+                  type="button"
+                  onClick={() => setMaritimeOpen(false)}
+                >
                   Cancelar
                 </button>
                 <button
-                  className="cg-button is-accept"
+                  className={CG_BUTTON_ACCEPT}
                   type="submit"
                   disabled={
                     busy ||
@@ -404,7 +496,6 @@ export default function GameActions({
           </section>
         </div>
       )}
-
     </>
   );
 }
