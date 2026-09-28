@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
+import {
+  Castle,
+  Dices,
+  Handshake,
+  Home,
+  Hourglass,
+  Landmark,
+  Layers,
+  Lock,
+  Route,
+  Sparkles,
+} from "lucide-react";
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
-import { bundleTotal, emptyBundle, RESOURCE_NAMES, ResourceCard } from "./TradePanels";
-import {
-  BANK_FILE,
-  DEV_CARD_BACK_FILE,
-  DEV_CARD_FILES,
-  pieceFile,
-  RESOURCE_CARD_FILES,
-  RESOURCE_PORT_FILES,
-  TRADE_ICON_FILE,
-} from "../assets";
+import { bundleTotal, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
+import { DEV_CARD_FILES, RESOURCE_CARD_FILES, RESOURCE_PORT_FILES } from "../assets";
 import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 
 interface GameActionsProps {
@@ -36,26 +40,88 @@ const CARD_NAMES: Record<HeldDevelopmentCard["type"], string> = {
 };
 
 const PHASE_LABEL: Record<string, string> = {
-  "setup-settlement": "Colocación inicial · poblado",
-  "setup-road": "Colocación inicial · camino",
-  "awaiting-roll": "Tirar los dados",
-  discard: "Descartar por el siete",
-  robber: "Mover al ladrón",
+  "setup-settlement": "Colocá tu poblado inicial",
+  "setup-road": "Colocá tu camino inicial",
+  "awaiting-roll": "Tirá los dados",
+  discard: "Descartá por el siete",
+  robber: "Movés al ladrón",
   main: "Acciones",
   trade: "Comercio en curso",
   finished: "Partida terminada",
 };
 
-function actionButtonClass(variant: "default" | "active" | "primary"): string {
-  const base =
-    "relative flex min-h-[52px] flex-col items-center justify-center gap-px rounded-[10px] border px-1 py-[5px] transition disabled:opacity-50";
-  if (variant === "primary") {
-    return `${base} border-[#2c7f3c] bg-gradient-to-b from-[#4cae5c] to-[#2f9e44] text-white shadow-[0_2px_0_#237a34] enabled:hover:brightness-105`;
-  }
-  if (variant === "active") {
-    return `${base} border-[#d0a437] bg-gradient-to-b from-[#fdf0c4] to-[#f5dd9a] text-[#4d4738] shadow-[0_2px_0_#c9bda2] ring-2 ring-[#d0a437]/45 enabled:hover:brightness-105`;
-  }
-  return `${base} border-[#cfc5ae] bg-gradient-to-b from-[#fdf8ec] to-[#efe5cf] text-[#4d4738] shadow-[0_2px_0_#c9bda2] enabled:hover:brightness-105`;
+function ResourceStack({ resource, count }: { resource: Resource; count: number }) {
+  const individual = count < 3 ? count : 1;
+  return (
+    <div
+      className="flex items-end gap-0.5"
+      title={`${count} ${RESOURCE_NAMES[resource].toLowerCase()}`}
+    >
+      {Array.from({ length: individual }, (_, index) => (
+        <span key={index} className="relative">
+          <img
+            className="h-11 w-auto drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)]"
+            src={RESOURCE_CARD_FILES[resource]}
+            alt={RESOURCE_NAMES[resource]}
+            draggable={false}
+          />
+          {count >= 3 && (
+            <span className="absolute -bottom-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-[#f7ecd4] bg-[#274b66] px-0.5 text-[10px] font-black text-white">
+              ×{count}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  title,
+  onClick,
+  disabled,
+  active = false,
+  primary = false,
+  count,
+}: {
+  icon: ReactNode;
+  label: string;
+  title: string;
+  onClick: () => void;
+  disabled: boolean;
+  active?: boolean;
+  primary?: boolean;
+  count?: number;
+}) {
+  const tone = primary
+    ? "border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] text-[#4a2c12] shadow-[0_3px_0_#8a5a1e]"
+    : active
+      ? "border-[#d9a44a] bg-[#ffe9b8] text-[#4a2c12] shadow-[0_3px_0_#d9a44a]"
+      : "border-[#c9a86a] bg-[#fdf6e3] text-[#7a5320] shadow-[0_3px_0_#c9a86a]";
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-1 py-1 transition ${tone} ${
+        disabled
+          ? "cursor-not-allowed opacity-55 saturate-50"
+          : "enabled:hover:brightness-105 enabled:active:translate-y-0.5"
+      }`}
+    >
+      <span className="leading-none">{icon}</span>
+      <span className="text-[9px] font-extrabold leading-none">{label}</span>
+      {count !== undefined && (
+        <span className="absolute -right-1 -top-1 grid h-[17px] min-w-[17px] place-items-center rounded-full border-2 border-[#f7ecd4] bg-[#274b66] text-[9px] font-black text-white">
+          {count}
+        </span>
+      )}
+      {disabled && <Lock size={11} className="absolute bottom-0.5 right-0.5 text-[#8a6a3a]" />}
+    </button>
+  );
 }
 
 export default function GameActions({
@@ -82,9 +148,6 @@ export default function GameActions({
   const pendingCount = game.self.pendingDiscardCount;
   const discardTotal = bundleTotal(discard);
   const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
-  const currentPlayerIsBot = room.players.some(
-    (player) => player.id === game.currentPlayerId && player.isBot,
-  );
 
   useEffect(() => {
     setDiscard(emptyBundle());
@@ -133,61 +196,53 @@ export default function GameActions({
   const roadsLeft = 15 - (selfPlayer?.roadsBuilt ?? 0);
   const settlementsLeft = 5 - (selfPlayer?.settlementsBuilt ?? 0);
   const citiesLeft = 4 - (selfPlayer?.citiesBuilt ?? 0);
-  const selfColor = selfPlayer?.color ?? "#e2b83f";
-
-  const actionIcon = "text-lg leading-none";
-  const actionLabel = "text-[10px] font-extrabold";
-  const actionCount =
-    "absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[10px] font-black text-white";
-  const actionCost = "text-[8px] text-[#8b8271]";
+  const ownedResources = RESOURCES.filter((resource) => game.self.resources[resource] > 0);
 
   return (
     <>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 rounded-[14px] border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_-2px_14px_rgba(8,30,48,0.25)] max-[940px]:max-h-[320px] max-[940px]:grid-cols-1 max-[940px]:overflow-y-auto">
-        <section className="flex min-w-0 flex-col justify-center gap-1.5" aria-label="Tu mano">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-soft">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-2.5 py-1.5 shadow-[0_4px_0_rgba(74,44,18,0.3)] max-[940px]:max-h-[300px] max-[940px]:grid-cols-1 max-[940px]:overflow-y-auto">
+        <section className="flex min-w-0 flex-col justify-center gap-1" aria-label="Tu mano">
+          <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#a08a5e]">
+            <Layers size={13} />
             Tu mano
-            <small className="text-[9px] font-normal normal-case tracking-normal text-[#9a9384]">
-              {bundleTotal(game.self.resources)} recursos
-            </small>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {RESOURCES.map((resource) => (
-              <ResourceCard
-                key={resource}
-                resource={resource}
-                count={game.self.resources[resource]}
-              />
-            ))}
+          <div className="flex flex-wrap items-end gap-1.5">
+            {ownedResources.length === 0 ? (
+              <span className="text-[11px] font-semibold text-[#b08a4a]">Sin cartas</span>
+            ) : (
+              ownedResources.map((resource) => (
+                <ResourceStack
+                  key={resource}
+                  resource={resource}
+                  count={game.self.resources[resource]}
+                />
+              ))
+            )}
           </div>
           {game.self.developmentCards.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1">
               {game.self.developmentCards.map((card) => {
                 const playable = isCardPlayable(card);
                 const selected = selectedCard?.id === card.id;
                 return (
                   <span
                     key={card.id}
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 py-[3px] text-[10px] font-bold text-[#5a5140] ${
-                      selected
-                        ? "border-[#c99b2f] bg-[#fbeec4]"
-                        : "border-line bg-[#f4ecda]"
-                    } ${playable ? "ring-1 ring-catan-green/50" : ""}`}
+                    className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
+                      selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
+                    }`}
                   >
                     <img
-                      className="h-[34px] w-auto drop-shadow-[0_2px_2px_rgba(0,0,0,0.25)]"
+                      className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
                       src={DEV_CARD_FILES[card.type]}
                       alt={CARD_NAMES[card.type]}
                       title={CARD_NAMES[card.type]}
                       draggable={false}
                     />
-                    {card.type === "victory-point" ? (
-                      <small>+1 PV</small>
-                    ) : card.boughtOnTurn >= game.turnNumber ? (
-                      <small>Nueva</small>
+                    {card.type === "victory-point" ? null : card.boughtOnTurn >= game.turnNumber ? (
+                      <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
                     ) : (
                       <button
-                        className="rounded-md border-0 bg-catan-green px-1.5 py-0.5 text-[9px] font-extrabold text-white disabled:opacity-50"
+                        className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
                         type="button"
                         disabled={!playable || busy}
                         onClick={() => onSelectedCard(card)}
@@ -200,53 +255,40 @@ export default function GameActions({
               })}
             </div>
           )}
-          {game.playedDevelopmentCardThisTurn && (
-            <p className="text-[10px] text-[#9a9384]">
-              Ya jugaste una carta de desarrollo este turno.
-            </p>
-          )}
         </section>
 
         <section
-          className="flex min-w-[210px] flex-col items-center justify-center gap-1 border-x border-line px-3.5 max-[1180px]:min-w-[170px] max-[1180px]:px-2 max-[940px]:min-w-0 max-[940px]:border-x-0 max-[940px]:border-y max-[940px]:border-line max-[940px]:py-2"
+          className="flex min-w-[168px] flex-col items-center justify-center gap-0.5 border-x-2 border-[#e3cfa5] px-3 max-[1180px]:min-w-[150px] max-[1180px]:px-2 max-[940px]:min-w-0 max-[940px]:border-x-0 max-[940px]:border-y-2 max-[940px]:border-[#e3cfa5] max-[940px]:py-1.5"
           aria-label="Estado del turno"
         >
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#4d4738]">
-            <i
-              className="inline-block h-2.5 w-2.5 rounded-full"
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#7a5320]">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full border border-[#8a5a1e]"
               style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }}
             />
-            {isMyTurn
-              ? "Tu turno"
-              : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
+            {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
           </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`grid h-[30px] w-[30px] place-items-center rounded-[7px] border border-[#cfc5ae] bg-white text-[15px] font-black shadow-[0_2px_2px_rgba(0,0,0,0.12)] ${
-                game.lastRoll ? "text-[#33302a]" : "text-[#c8c1b0]"
-              }`}
-            >
-              {game.lastRoll ? game.lastRoll.dice[0] : "·"}
+          {game.lastRoll ? (
+            <div className="flex items-center gap-1 text-[13px] font-black text-[#4a2c12]">
+              <Dices size={14} />
+              {game.lastRoll.dice[0]} + {game.lastRoll.dice[1]} = {game.lastRoll.total}
+            </div>
+          ) : (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-[#b08a4a]">
+              <Dices size={13} /> Sin tirar
             </span>
-            <span
-              className={`grid h-[30px] w-[30px] place-items-center rounded-[7px] border border-[#cfc5ae] bg-white text-[15px] font-black shadow-[0_2px_2px_rgba(0,0,0,0.12)] ${
-                game.lastRoll ? "text-[#33302a]" : "text-[#c8c1b0]"
-              }`}
-            >
-              {game.lastRoll ? game.lastRoll.dice[1] : "·"}
-            </span>
-          </div>
+          )}
           {isMyTurn && game.phase === "awaiting-roll" ? (
             <button
-              className="rounded-[9px] border-0 bg-catan-green px-[18px] py-[7px] text-xs font-black text-white shadow-[0_3px_0_#237a34] active:translate-y-px active:shadow-[0_2px_0_#237a34] disabled:opacity-50"
+              className="inline-flex min-h-[32px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-3 font-display text-xs font-extrabold text-[#4a2c12] shadow-[0_3px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5 disabled:opacity-50"
               type="button"
               disabled={busy}
               onClick={() => void onAction({ type: "roll" })}
             >
-              🎲 Tirar dados
+              <Dices size={14} /> Tirar
             </button>
           ) : (
-            <p className="max-w-[240px] text-center text-[10px] text-[#8b8271]">
+            <p className="max-w-[200px] text-center text-[10px] font-semibold text-[#b08a4a]">
               {PHASE_LABEL[game.phase] ?? game.phase}
               {game.phase === "trade" && !isMyTurn ? " · esperando al oferente" : ""}
             </p>
@@ -254,80 +296,65 @@ export default function GameActions({
         </section>
 
         <section
-          className="grid grid-cols-[repeat(3,minmax(74px,96px))] justify-end gap-1.5 max-[1180px]:grid-cols-[repeat(3,minmax(64px,82px))] max-[940px]:grid-cols-3 max-[940px]:justify-stretch"
+          className="grid grid-cols-4 justify-end gap-1.5 max-[1180px]:gap-1 max-[940px]:grid-cols-4 max-[940px]:justify-stretch"
           aria-label="Acciones"
         >
-          <button
-            className={actionButtonClass("default")}
-            type="button"
+          <ActionButton
+            icon={<Handshake size={17} />}
+            label="Comercio"
+            title="Ofrecer un intercambio a la mesa"
             disabled={busy || !isMainTurn}
             onClick={onOpenTrade}
-          >
-            <img className="h-[22px] w-auto" src={TRADE_ICON_FILE} alt="" draggable={false} />
-            <span className={actionLabel}>Comercio</span>
-          </button>
-          <button
-            className={actionButtonClass("default")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Sparkles size={17} />}
+            label="Carta"
+            title="Comprar carta de desarrollo (oveja + trigo + mineral)"
             disabled={busy || !isMainTurn}
             onClick={() => void onAction({ type: "buy-development-card" })}
-          >
-            <img className="h-[30px] w-auto" src={DEV_CARD_BACK_FILE} alt="" draggable={false} />
-            <span className={actionLabel}>Desarrollo</span>
-            <span className={actionCost}>🐑🌾⛰️</span>
-          </button>
-          <button
-            className={actionButtonClass(mode === "road" ? "active" : "default")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Route size={17} />}
+            label="Camino"
+            title="Construir camino (madera + ladrillo)"
+            active={mode === "road"}
             disabled={busy || !isMainTurn || room.legal.roadIds.length === 0}
+            count={roadsLeft}
             onClick={() => toggleMode("road")}
-          >
-            <img className="h-[30px] w-auto" src={pieceFile("road", selfColor)} alt="" draggable={false} />
-            <span className={actionLabel}>Camino</span>
-            <span className={actionCost}>🌲🧱</span>
-            <span className={actionCount}>{roadsLeft}</span>
-          </button>
-          <button
-            className={actionButtonClass(mode === "settlement" ? "active" : "default")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Home size={17} />}
+            label="Poblado"
+            title="Construir poblado (madera + ladrillo + oveja + trigo)"
+            active={mode === "settlement"}
             disabled={busy || !isMainTurn || room.legal.settlementVertexIds.length === 0}
+            count={settlementsLeft}
             onClick={() => toggleMode("settlement")}
-          >
-            <img className="h-[26px] w-auto" src={pieceFile("settlement", selfColor)} alt="" draggable={false} />
-            <span className={actionLabel}>Poblado</span>
-            <span className={actionCost}>🌲🧱🐑🌾</span>
-            <span className={actionCount}>{settlementsLeft}</span>
-          </button>
-          <button
-            className={actionButtonClass(mode === "city" ? "active" : "default")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Castle size={17} />}
+            label="Ciudad"
+            title="Mejorar a ciudad (2 trigo + 3 mineral)"
+            active={mode === "city"}
             disabled={busy || !isMainTurn || room.legal.cityVertexIds.length === 0}
+            count={citiesLeft}
             onClick={() => toggleMode("city")}
-          >
-            <img className="h-[26px] w-auto" src={pieceFile("city", selfColor)} alt="" draggable={false} />
-            <span className={actionLabel}>Ciudad</span>
-            <span className={actionCost}>🌾🌾⛰️⛰️⛰️</span>
-            <span className={actionCount}>{citiesLeft}</span>
-          </button>
-          <button
-            className={actionButtonClass("default")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Landmark size={17} />}
+            label="Banco"
+            title={`Intercambiar con el banco (tasa ${room.legal.tradeRatios[giveResource]}:1)`}
             disabled={busy || !isMainTurn}
             onClick={() => setMaritimeOpen(true)}
-          >
-            <img className="h-[26px] w-auto" src={BANK_FILE} alt="" draggable={false} />
-            <span className={actionLabel}>Banco</span>
-            <span className={actionCost}>{room.legal.tradeRatios[giveResource]}:1</span>
-          </button>
-          <button
-            className={actionButtonClass("primary")}
-            type="button"
+          />
+          <ActionButton
+            icon={<Hourglass size={17} />}
+            label="Terminar"
+            title="Terminar el turno"
+            primary
             disabled={busy || !isMainTurn}
             onClick={() => void onAction({ type: "end-turn" })}
-          >
-            <span className={actionIcon}>⏳</span>
-            <span className={actionLabel}>Terminar turno</span>
-          </button>
+          />
         </section>
       </div>
 
@@ -335,21 +362,21 @@ export default function GameActions({
         <div className={MODAL_BACKDROP} role="presentation">
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="discard-title">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a9793a]">
                 Salió un siete
               </p>
-              <h2 id="discard-title" className="mt-1 text-[22px] font-black text-[#2c3c30]">
+              <h2 id="discard-title" className="mt-1 font-display text-[22px] font-black text-[#4a2c12]">
                 Descartá {pendingCount} cartas
               </h2>
             </div>
-            <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
+            <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
               Elegí qué recursos devolver al banco para poder mover al ladrón.
             </p>
             <div className="mt-3">
               {RESOURCES.map((resource) => (
                 <label
                   key={resource}
-                  className="mt-1.5 flex items-center justify-between gap-2 text-xs"
+                  className="mt-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-[#7a5320]"
                 >
                   <span className="flex items-center gap-2">
                     <img
@@ -362,7 +389,7 @@ export default function GameActions({
                     <small>({game.self.resources[resource]})</small>
                   </span>
                   <input
-                    className="w-[58px] rounded-[7px] border border-line px-[7px] py-[5px] text-center font-bold"
+                    className="w-[58px] rounded-xl border-2 border-[#c9a86a] bg-[#fffaf0] px-2 py-1 text-center font-bold text-[#4a2c12] outline-none focus:border-[#a9793a]"
                     type="number"
                     min={0}
                     max={game.self.resources[resource]}
@@ -382,13 +409,13 @@ export default function GameActions({
             </div>
             <div
               className={`mt-3 text-xs font-bold ${
-                discardTotal === pendingCount ? "text-[#2f6b34]" : "text-catan-red-dark"
+                discardTotal === pendingCount ? "text-[#4a6b28]" : "text-[#a4462f]"
               }`}
             >
               Seleccionadas: {discardTotal} / {pendingCount}
             </div>
             {discardSubmitted && discardTotal !== pendingCount && (
-              <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
+              <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
                 Elegí exactamente {pendingCount} cartas.
               </p>
             )}
@@ -417,15 +444,15 @@ export default function GameActions({
           >
             <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a9793a]">
                   Comercio marítimo
                 </p>
-                <h2 id="maritime-title" className="mt-1 text-[22px] font-black text-[#2c3c30]">
+                <h2 id="maritime-title" className="mt-1 font-display text-[22px] font-black text-[#4a2c12]">
                   Intercambiar con el banco
                 </h2>
               </div>
               <button
-                className="border-0 bg-transparent text-[22px] leading-none text-[#8b8271]"
+                className="border-0 bg-transparent text-[22px] leading-none text-[#a08a5e]"
                 type="button"
                 aria-label="Cerrar"
                 onClick={() => setMaritimeOpen(false)}
@@ -436,7 +463,7 @@ export default function GameActions({
             <form onSubmit={submitMaritimeTrade}>
               <div className="mt-3.5 grid grid-cols-1 items-center gap-2 min-[560px]:grid-cols-[1fr_26px_1fr]">
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#a9793a]">
                     Entregás
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -444,9 +471,9 @@ export default function GameActions({
                       <button
                         key={resource}
                         type="button"
-                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-[4px] transition ${
+                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-lg transition ${
                           giveResource === resource
-                            ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                            ? "outline outline-[3px] outline-offset-1 outline-[#d9a44a]"
                             : "hover:-translate-y-0.5"
                         }`}
                         title={RESOURCE_NAMES[resource]}
@@ -462,7 +489,7 @@ export default function GameActions({
                     ))}
                   </div>
                   <input
-                    className="min-h-[42px] rounded-xl border border-line bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-ocean/40"
+                    className="min-h-[42px] rounded-xl border-2 border-[#c9a86a] bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#4a2c12] outline-none focus:border-[#a9793a]"
                     type="number"
                     min={1}
                     value={giveAmount}
@@ -475,15 +502,15 @@ export default function GameActions({
                       alt=""
                       draggable={false}
                     />
-                    <small className="text-[10px] text-[#9a9384]">
+                    <small className="text-[10px] font-semibold text-[#a08a5e]">
                       Tasa {room.legal.tradeRatios[giveResource]}:1 para{" "}
                       {RESOURCE_NAMES[giveResource]}
                     </small>
                   </div>
                 </div>
-                <div className="text-center text-xl font-black text-[#a59a82]">⇄</div>
+                <div className="text-center text-xl font-black text-[#c0a273]">⇄</div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#a9793a]">
                     Recibís
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -491,9 +518,9 @@ export default function GameActions({
                       <button
                         key={resource}
                         type="button"
-                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-[4px] transition ${
+                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-lg transition ${
                           wantResource === resource
-                            ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                            ? "outline outline-[3px] outline-offset-1 outline-[#d9a44a]"
                             : "hover:-translate-y-0.5"
                         }`}
                         title={RESOURCE_NAMES[resource]}

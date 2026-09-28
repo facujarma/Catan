@@ -12,6 +12,7 @@
   "dependencies": {
     "@catan/engine": "workspace:*",
     "convex": "^1.25.0",
+    "lucide-react": "^1.48.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

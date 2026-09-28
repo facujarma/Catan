@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { GameAction } from "@catan/engine";
+import type { GameAction, GameState } from "@catan/engine";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -48,7 +48,16 @@ async function startRoomWithBots(
     playerToken: HOST.playerToken,
     ready: true,
   });
-  await t.mutation(api.rooms.startGame, { code: CODE, playerToken: HOST.playerToken });
+  await startGameWithoutShuffle(t);
+}
+
+async function startGameWithoutShuffle(t: TestClient): Promise<void> {
+  const random = vi.spyOn(Math, "random").mockReturnValue(0.999999);
+  try {
+    await t.mutation(api.rooms.startGame, { code: CODE, playerToken: HOST.playerToken });
+  } finally {
+    random.mockRestore();
+  }
 }
 
 async function snapshot(t: TestClient) {
@@ -100,10 +109,50 @@ describe("bots", () => {
       playerToken: HOST.playerToken,
       ready: true,
     });
-    await t.mutation(api.rooms.startGame, { code: CODE, playerToken: HOST.playerToken });
+    await startGameWithoutShuffle(t);
     room = await snapshot(t);
     expect(room.status).toBe("playing");
     expect(room.game?.players).toHaveLength(3);
+  });
+
+  test("el orden de turnos se sortea al iniciar la partida", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    const firstBot = await t.mutation(api.rooms.addBot, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+    });
+    const secondBot = await t.mutation(api.rooms.addBot, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      await t.mutation(api.rooms.startGame, { code: CODE, playerToken: HOST.playerToken });
+    } finally {
+      random.mockRestore();
+    }
+
+    const raw = await t.run(async (ctx) => ctx.db.query("rooms").first());
+    const state = raw!.gameState as GameState;
+    expect(state.players.map((player) => player.id)).toEqual([
+      firstBot.botId,
+      secondBot.botId,
+      HOST.playerId,
+    ]);
+
+    const events = await t.query(api.rooms.listEvents, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+    });
+    expect(events.some((event) => event.message.includes("Orden de turnos"))).toBe(true);
   });
 
   test("los bots completan la colocación inicial y juegan su turno tras cinco segundos", async () => {

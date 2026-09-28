@@ -39,13 +39,15 @@ export default function FeedPanel({ messages, events, disabled = false, onSend }
   };
 
   const tabClass = (active: boolean) =>
-    `flex-1 rounded-[7px] border-0 px-2 py-[5px] text-[11px] font-extrabold transition ${
-      active ? "bg-[#efe6d1] text-[#4d4433]" : "bg-transparent text-ink-soft hover:bg-[#f3ecdc]"
+    `flex-1 rounded-lg border-2 px-2 py-1 font-display text-[11px] font-extrabold transition ${
+      active
+        ? "border-[#d9a44a] bg-[#ffe9b8] text-[#7a5320] shadow-[0_2px_0_#d9a44a]"
+        : "border-transparent text-[#a08a5e] hover:bg-[#f0e2c4]"
     }`;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/[0.18] bg-paper-soft shadow-[0_4px_14px_rgba(8,30,48,0.22)]">
-      <div className="flex gap-1 border-b border-line p-1.5">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] shadow-[0_4px_0_rgba(74,44,18,0.25)]">
+      <div className="flex gap-1.5 border-b-2 border-[#e3cfa5] p-1.5">
         <button
           type="button"
           className={tabClass(activeTab === "chat")}
@@ -65,28 +67,28 @@ export default function FeedPanel({ messages, events, disabled = false, onSend }
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2" aria-live="polite">
         {activeTab === "chat" ? (
           messages.length === 0 ? (
-            <p className="px-1.5 py-[22px] text-center text-xs text-[#9a9384]">
+            <p className="px-1.5 py-[22px] text-center text-xs font-semibold text-[#b08a4a]">
               Todavía no hay mensajes. ¡Saluden!
             </p>
           ) : (
             messages.map((message) => (
               <div key={message.id} className="mb-2 text-xs leading-[1.45]">
-                <strong className="font-extrabold text-[#3c4c3a]">{message.playerName}</strong>
-                <time className="float-right text-[9px] text-[#a8a191]">
+                <strong className="font-extrabold text-[#4a2c12]">{message.playerName}</strong>
+                <time className="float-right text-[9px] font-semibold text-[#b08a4a]">
                   {timeLabel(message.createdAt)}
                 </time>
-                <p className="mt-px break-words text-[#5d594c]">{message.body}</p>
+                <p className="mt-px break-words font-semibold text-[#7a5320]">{message.body}</p>
               </div>
             ))
           )
         ) : events.length === 0 ? (
-          <p className="px-1.5 py-[22px] text-center text-xs text-[#9a9384]">
+          <p className="px-1.5 py-[22px] text-center text-xs font-semibold text-[#b08a4a]">
             El registro aparecerá al empezar.
           </p>
         ) : (
           events.map((item) => (
-            <div key={item.id} className="mb-2 text-[11px] leading-[1.45] text-[#6c6656]">
-              <span className="mr-[5px] text-[9px] text-[#8b8271]">
+            <div key={item.id} className="mb-2 text-[11px] font-semibold leading-[1.45] text-[#8a6a3a]">
+              <span className="mr-[5px] text-[9px] text-[#b08a4a]">
                 {timeLabel(item.createdAt)}
               </span>
               {item.message}
@@ -96,9 +98,9 @@ export default function FeedPanel({ messages, events, disabled = false, onSend }
       </div>
 
       {activeTab === "chat" && (
-        <form className="flex gap-1.5 border-t border-line p-[7px]" onSubmit={submit}>
+        <form className="flex gap-1.5 border-t-2 border-[#e3cfa5] p-[7px]" onSubmit={submit}>
           <input
-            className="min-w-0 flex-1 rounded-lg border border-line bg-white px-2.5 py-[7px] text-xs text-ink outline-none transition placeholder:text-[#b0afa3] focus:ring-2 focus:ring-ocean/40"
+            className="min-w-0 flex-1 rounded-xl border-2 border-[#c9a86a] bg-[#fffaf0] px-2.5 py-[7px] text-xs font-semibold text-[#4a2c12] outline-none transition placeholder:text-[#c0a273] focus:border-[#a9793a]"
             maxLength={500}
             placeholder={disabled ? "Chat no disponible" : "Enviar un mensaje"}
             value={body}
@@ -106,7 +108,7 @@ export default function FeedPanel({ messages, events, disabled = false, onSend }
             disabled={disabled || sending}
           />
           <button
-            className="rounded-lg bg-ocean px-3 text-xs font-extrabold text-white transition enabled:hover:brightness-110 disabled:opacity-50"
+            className="rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-3 font-display text-xs font-extrabold text-[#4a2c12] shadow-[0_3px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5 disabled:opacity-50"
             disabled={disabled || sending || !body.trim()}
             type="submit"
           >

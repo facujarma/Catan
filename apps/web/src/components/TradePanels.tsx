@@ -290,7 +290,7 @@ export function TradeOfferPanel({
 
   return (
     <section
-      className="absolute left-1/2 top-2.5 z-[45] w-[min(560px,calc(100%-20px))] -translate-x-1/2 rounded-[14px] border border-[#786032]/35 bg-paper-soft shadow-[0_14px_40px_rgba(6,28,44,0.4)]"
+      className="absolute left-1/2 top-2.5 z-[45] w-[min(560px,calc(100%-20px))] -translate-x-1/2 rounded-3xl border-2 border-[#c9a86a] bg-[#f7ecd4] shadow-[0_6px_0_rgba(74,44,18,0.3),0_14px_40px_rgba(20,10,2,0.4)]"
       aria-label="Oferta de comercio global"
     >
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">

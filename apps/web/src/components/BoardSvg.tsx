@@ -480,23 +480,23 @@ export default function BoardSvg({
               {!tileFile && <TerrainIcon terrain={hex.terrain} cx={cx} cy={cy} />}
               {hex.number !== null && (
                 <g pointerEvents="none" filter="url(#token-shadow)">
-                  <circle cx={cx} cy={cy + 13} r="24" fill="#ddcda6" />
-                  <circle cx={cx} cy={cy + 13} r="20.8" fill="#fdf8ea" stroke="#c7b48a" strokeWidth="1.4" />
+                  <circle cx={cx} cy={cy} r="25" fill="#cbbd9a" />
+                  <circle cx={cx} cy={cy} r="22.5" fill="#fdf8ea" />
                   <text
                     x={cx}
-                    y={cy + 21.5}
+                    y={cy + 8.5}
                     textAnchor="middle"
                     fontFamily="Georgia, 'Times New Roman', serif"
-                    fontSize="23"
+                    fontSize="27"
                     fontWeight="900"
                     fill={pipColor}
                   >
                     {hex.number}
                   </text>
                   {Array.from({ length: pips }, (_, index) => {
-                    const spacing = 5.5;
+                    const spacing = 6.5;
                     const x = cx - ((pips - 1) * spacing) / 2 + index * spacing;
-                    return <circle key={index} cx={x} cy={cy + 29.5} r="1.6" fill={pipColor} />;
+                    return <circle key={index} cx={x} cy={cy + 19.5} r="1.9" fill={pipColor} />;
                   })}
                 </g>
               )}
@@ -580,7 +580,7 @@ export default function BoardSvg({
                   : false));
           const midX = (x1 + x2) / 2;
           const midY = (y1 + y2) / 2;
-          const roadLength = SCALE * 1.04;
+          const roadLength = SCALE * 0.96;
           const roadWidth = roadLength * (40 / 194);
           const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
           return (
@@ -647,18 +647,18 @@ export default function BoardSvg({
                 <g pointerEvents="none">
                   <ellipse
                     cx={cx}
-                    cy={cy + 10}
-                    rx={isCity ? 17 : 11}
-                    ry={isCity ? 4.4 : 3.2}
+                    cy={cy + 11}
+                    rx={isCity ? 18 : 12}
+                    ry={isCity ? 4.6 : 3.4}
                     fill="#04182a"
                     opacity="0.25"
                   />
                   <image
                     href={pieceFile(isCity ? "city" : "settlement", owner.color)}
-                    x={cx - (isCity ? 26 : 19)}
-                    y={cy - (isCity ? 33 : 25)}
-                    width={isCity ? 52 : 38}
-                    height={isCity ? 52 : 38}
+                    x={cx - (isCity ? 27 : 22)}
+                    y={cy - (isCity ? 34 : 28)}
+                    width={isCity ? 54 : 44}
+                    height={isCity ? 54 : 44}
                   />
                 </g>
               )}

@@ -17,6 +17,9 @@ import {
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD } from "./ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "./model";
 
+const TABLE_BACKGROUND =
+  "[background-image:repeating-linear-gradient(90deg,#573924_0px,#573924_80px,#4e321f_80px,#4e321f_160px)]";
+
 export default function App() {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim();
   const [preview, setPreview] = useState(false);
@@ -242,16 +245,21 @@ function CatanApp() {
     const message = tone === "error" ? error : notice;
     const palette =
       tone === "error"
-        ? "border-[#edc4b9] bg-[#fff0eb] text-[#8a4033]"
-        : "border-[#c9ddbf] bg-[#eff7e9] text-[#426846]";
+        ? "border-[#c96a4a] bg-[#fde8dd] text-[#8a3a22]"
+        : "border-[#8fae5a] bg-[#eef4dc] text-[#4a6b28]";
     const dismiss = tone === "error" ? setError : setNotice;
     return (
       <div
-        className={`mx-auto mb-3.5 flex items-start justify-between gap-2.5 rounded-xl border px-3.5 py-[11px] text-[13px] ${palette}`}
+        className={`mx-auto mb-4 flex max-w-xl items-center justify-between gap-3 rounded-2xl border-2 px-4 py-2.5 text-sm font-bold shadow-[0_3px_0_rgba(74,44,18,0.3)] ${palette}`}
         role={tone === "error" ? "alert" : "status"}
       >
         {message}
-        <button className="border-0 bg-transparent text-[19px] leading-none" type="button" aria-label="Cerrar" onClick={() => dismiss("")}>
+        <button
+          className="border-0 bg-transparent text-lg leading-none opacity-60 enabled:hover:opacity-100"
+          type="button"
+          aria-label="Cerrar"
+          onClick={() => dismiss("")}
+        >
           ×
         </button>
       </div>
@@ -259,28 +267,26 @@ function CatanApp() {
   };
 
   const frame = (content: ReactNode) => (
-    <div className="min-h-screen bg-[#12372a] bg-gradient-to-br from-[#17402f] via-[#12372a] to-[#0e2c21]">
-      <header className="mx-auto flex max-w-[1540px] items-center gap-3 px-6 pb-3.5 pt-[22px] text-[#f5f0df]">
-        <span className="inline-grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px] border border-[#e2bf6c]/70 bg-gradient-to-br from-[#e0bb67] to-[#a97232] text-[23px] font-black text-[#1c372a] shadow-[0_5px_12px_rgba(27,48,33,0.18)]">
-          C
-        </span>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d1a64f]">Catan Online</p>
-          <p className="text-sm text-[#d7e1d6]">Comerciá, construí, conquistá.</p>
-        </div>
-        <span className="ml-auto hidden rounded-full border border-white/15 px-3 py-1 text-xs text-[#d8e4d7] sm:inline-flex">
-          Partidas en tiempo real
-        </span>
-      </header>
-      <main className="mx-auto min-h-[calc(100vh-150px)] w-[min(100%-32px,1540px)] pb-[34px] pt-[18px]">
-        {error && noticeBanner("error")}
-        {notice && noticeBanner("success")}
-        {content}
-      </main>
-      <footer className="flex flex-wrap justify-center gap-x-2 gap-y-[5px] p-[18px] text-[11px] text-[#8c8e80]">
-        Un juego de estrategia para construir juntos.{" "}
-        <span className="text-[#a8a696]">Hecho para jugar con amigos.</span>
-      </footer>
+    <div className={`min-h-screen bg-[#4a2e1c] ${TABLE_BACKGROUND}`}>
+      <div className="flex min-h-screen flex-col bg-[radial-gradient(ellipse_at_50%_-10%,rgba(255,214,140,0.16),transparent_55%)]">
+        <header className="mx-auto flex w-[min(100%-32px,960px)] items-center gap-3 pt-6">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] text-2xl shadow-[0_4px_0_#8a5a1e]">
+            🎲
+          </span>
+          <div>
+            <p className="font-display text-2xl font-extrabold leading-none text-[#ffe9b8]">Catan</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#d9bd8d]">Jugá con amigos</p>
+          </div>
+        </header>
+        <main className="mx-auto w-[min(100%-32px,960px)] flex-1 py-8">
+          {error && noticeBanner("error")}
+          {notice && noticeBanner("success")}
+          {content}
+        </main>
+        <footer className="pb-6 text-center text-xs font-semibold text-[#c9a97e]">
+          Hecho para jugar con amigos
+        </footer>
+      </div>
     </div>
   );
 
@@ -316,7 +322,7 @@ function CatanApp() {
 
   if (roomCode && room === undefined) {
     return frame(
-      <div className={`${CARD} mx-auto max-w-md p-8 text-center text-[#687365]`}>
+      <div className={`${CARD} mx-auto max-w-md p-8 text-center font-bold text-[#8a6a3a]`}>
         Conectando con la sala…
       </div>,
     );
@@ -346,7 +352,7 @@ function CatanApp() {
     }
 
     if (!room.game) {
-      return gameFrame(<div className={`${CARD} m-6 p-8 text-center`}>Cargando partida…</div>);
+      return gameFrame(<div className={`${CARD} m-6 p-8 text-center font-bold text-[#8a6a3a]`}>Cargando partida…</div>);
     }
     return gameFrame(
       <GameRoom
@@ -363,38 +369,21 @@ function CatanApp() {
   }
 
   return frame(
-    <section className="mx-auto grid min-h-[min(72vh,680px)] max-w-[1180px] grid-cols-1 items-center gap-[clamp(32px,8vw,112px)] px-[18px] py-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-      <div>
-        <p className={`${EYEBROW} text-[#dbb65f]`}>El clásico de estrategia, ahora online</p>
-        <h1 className="mt-[18px] text-[clamp(3.15rem,7vw,6.8rem)] font-black leading-[0.97] tracking-[-0.065em] text-[#fff9e9] [text-wrap:balance]">
-          Un camino más.
-          <br />
-          <em className="not-italic text-[#e0bd6c]">Una isla nueva.</em>
-        </h1>
-        <p className="mt-6 max-w-[490px] text-base leading-[1.8] text-[#d4dfd4]">
-          Juntá recursos, negociá con tus amigos y conectá tus poblados. Sin cuentas: elegí un nombre y entrá a una sala.
-        </p>
-        <div className="mt-[30px] flex flex-wrap gap-[9px]">
-          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">⌂ Tablero aleatorio</span>
-          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">↗ 3–4 jugadores</span>
-          <span className="rounded-full border border-[#e6eede]/[0.16] px-[11px] py-2 text-[11px] text-[#e0e8dd]">◈ Reglas validadas en servidor</span>
-        </div>
-      </div>
+    <div className="mx-auto flex max-w-xl flex-col items-center">
+      <h1 className="text-center font-display text-4xl font-extrabold leading-tight text-[#ffe9b8] drop-shadow-[0_2px_0_rgba(0,0,0,0.3)] sm:text-5xl">
+        Construí tu isla
+      </h1>
+      <p className="mt-2 text-center text-sm font-semibold text-[#d9bd8d]">
+        3 a 4 jugadores · sin cuentas
+      </p>
 
-      <div className={`${CARD} px-[clamp(22px,4vw,34px)] py-[clamp(22px,4vw,34px)]`}>
-        <div className="mb-5 flex gap-2 border-b border-[#ece5d7] pb-4">
-          <span className="grid h-[45px] w-[45px] shrink-0 place-items-center rounded-[15px] bg-[#f4ebd6] text-[23px]">🎲</span>
-          <div>
-            <p className={EYEBROW}>Partida rápida</p>
-            <h2 className="text-2xl font-black text-[#1d392b]">¿Cómo te llamamos?</h2>
-          </div>
-        </div>
-        <label className="text-xs font-bold text-[#737b6e]" htmlFor="guest-name">
-          Nombre de jugador
+      <section className={`${CARD} mt-7 w-full p-6 sm:p-7`}>
+        <label className="block text-sm font-bold text-[#7a5320]" htmlFor="guest-name">
+          Tu nombre
         </label>
         <input
           id="guest-name"
-          className={`${FIELD} mt-1.5 w-full`}
+          className={`${FIELD} mt-1.5`}
           value={name}
           maxLength={24}
           autoComplete="nickname"
@@ -404,17 +393,17 @@ function CatanApp() {
 
         <form className="mt-5" onSubmit={submitCreateRoom}>
           <button className={`${BTN_PRIMARY} w-full`} type="submit" disabled={busy}>
-            Crear una sala
+            Crear sala
           </button>
         </form>
 
-        <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-[#a5a394]">
-          <span className="h-px flex-1 bg-[#ece5d7]" /> o unirse <span className="h-px flex-1 bg-[#ece5d7]" />
+        <div className="my-4 flex items-center gap-3 text-xs font-extrabold uppercase tracking-widest text-[#c0a273]">
+          <span className="h-0.5 flex-1 rounded bg-[#e3cfa5]" /> o <span className="h-0.5 flex-1 rounded bg-[#e3cfa5]" />
         </div>
 
         <form className="flex gap-2" onSubmit={submitJoinRoom}>
           <input
-            className={`${FIELD} min-w-0 flex-1 font-mono uppercase tracking-[0.18em]`}
+            className={`${FIELD} min-w-0 flex-1 text-center font-display text-lg tracking-[0.3em]`}
             aria-label="Código de sala"
             maxLength={4}
             placeholder="ABCD"
@@ -425,36 +414,33 @@ function CatanApp() {
             Unirse
           </button>
         </form>
-        <button className={`${BTN_LINK} mt-4 w-full`} type="button" onClick={() => setShowDemo(true)}>
-          Ver una partida de muestra
-        </button>
-        <p className="mt-4 text-center text-xs text-[#959487]">Tu identidad anónima se guarda en este navegador.</p>
-      </div>
-    </section>,
+      </section>
+
+      <button className={`${BTN_LINK} mt-5`} type="button" onClick={() => setShowDemo(true)}>
+        Ver una partida de muestra
+      </button>
+    </div>,
   );
 }
 
 function ConfigurationNotice({ onPreview }: { onPreview: () => void }) {
   return (
-    <div className="min-h-screen bg-[#12372a] bg-gradient-to-br from-[#17402f] via-[#12372a] to-[#0e2c21]">
-      <header className="mx-auto flex max-w-[1540px] items-center gap-3 px-6 pb-3.5 pt-[22px] text-[#f5f0df]">
-        <span className="inline-grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[14px] border border-[#e2bf6c]/70 bg-gradient-to-br from-[#e0bb67] to-[#a97232] text-[23px] font-black text-[#1c372a] shadow-[0_5px_12px_rgba(27,48,33,0.18)]">
-          C
-        </span>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d1a64f]">Catan Online</p>
-      </header>
-      <main className="mx-auto flex min-h-[70vh] w-[min(100%-32px,1540px)] items-center justify-center">
-        <section className={`${CARD} max-w-xl p-8`}>
-          <p className={EYEBROW}>Configuración necesaria</p>
-          <h1 className="mt-2 text-3xl font-black text-[#1f3c2e]">Conectá el proyecto Convex</h1>
-          <p className="mt-3 leading-7 text-[#6a7567]">
-            Copiá <code>apps/web/.env.example</code> a <code>apps/web/.env.local</code>, agregá la URL de tu deployment y corré <code>bun run convex:dev</code>.
-          </p>
-          <button className={`${BTN_PRIMARY} mt-6`} type="button" onClick={onPreview}>
-            Ver una partida de muestra
-          </button>
-        </section>
-      </main>
+    <div className={`grid min-h-screen place-items-center bg-[#4a2e1c] p-6 ${TABLE_BACKGROUND}`}>
+      <section className={`${CARD} w-full max-w-md p-7 text-center`}>
+        <span className="text-4xl" aria-hidden="true">🎲</span>
+        <p className={`${EYEBROW} mt-3`}>Configuración</p>
+        <h1 className="mt-1 font-display text-3xl font-extrabold text-[#4a2c12]">
+          Falta conectar Convex
+        </h1>
+        <p className="mt-3 text-sm font-semibold leading-6 text-[#8a6a3a]">
+          Agregá <code className="rounded bg-[#efe0bd] px-1">VITE_CONVEX_URL</code> en{" "}
+          <code className="rounded bg-[#efe0bd] px-1">apps/web/.env.local</code> y corré{" "}
+          <code className="rounded bg-[#efe0bd] px-1">bun run convex:dev</code>.
+        </p>
+        <button className={`${BTN_PRIMARY} mt-5 w-full`} type="button" onClick={onPreview}>
+          Ver una partida de muestra
+        </button>
+      </section>
     </div>
   );
 }

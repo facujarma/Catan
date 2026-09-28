@@ -390,6 +390,15 @@ function createBotIdentity(prefix: string): string {
   return `${prefix}-${random.padEnd(32, "0")}`;
 }
 
+function shufflePlayers<T>(players: T[]): T[] {
+  const shuffled = [...players];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const otherIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[otherIndex]] = [shuffled[otherIndex]!, shuffled[index]!];
+  }
+  return shuffled;
+}
+
 export const createRoom = mutation({
   args: {
     code: v.string(),
@@ -571,10 +580,18 @@ export const startGame = mutation({
     }
 
     const gameState = createGame({
-      players: room.players.map(({ id, name }) => ({ id, name })),
+      players: shufflePlayers(room.players.map(({ id, name }) => ({ id, name }))),
       seed: String(room._id),
     });
     await writeEvent(ctx, room, member.id, member.name, "system", "La partida comenzó.");
+    await writeEvent(
+      ctx,
+      room,
+      member.id,
+      member.name,
+      "system",
+      `Orden de turnos: ${gameState.players.map((player) => player.name).join(" → ")}.`,
+    );
     await commitGameFlow(ctx, room, {
       state: gameState,
       turnStartedAt: Date.now(),

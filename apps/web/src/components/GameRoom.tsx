@@ -4,8 +4,20 @@ import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/eng
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
+import {
+  Castle,
+  Crown,
+  Home,
+  Landmark,
+  Layers,
+  LogOut,
+  Route,
+  ScrollText,
+  Swords,
+  UserPlus,
+} from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
-import { BANK_FILE, RESOURCE_CARD_FILES } from "../assets";
+import { RESOURCE_CARD_FILES } from "../assets";
 import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "../model";
 
@@ -198,17 +210,22 @@ export default function GameRoom({
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-gradient-to-b from-ocean-light via-ocean to-ocean-deep text-ink">
-      <header className="z-20 flex shrink-0 items-center justify-between gap-2.5 bg-[#0c2c42]/[0.8] px-3 py-1.5 shadow-[0_2px_8px_rgba(6,28,44,0.25)]">
+      <header className="z-20 flex shrink-0 items-center justify-between gap-2.5 border-b-2 border-[#8a5a1e] bg-[#4a2e1c]/95 px-3 py-1.5 shadow-[0_3px_0_rgba(30,16,6,0.35)]">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[15px] font-black tracking-[0.2em] text-[#fdf6e3] [text-shadow:0_1px_0_rgba(0,0,0,0.35)]">
+          <span className="grid h-7 w-7 place-items-center rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] text-sm shadow-[0_2px_0_#8a5a1e]">
+            🎲
+          </span>
+          <span className="font-display text-lg font-extrabold tracking-[0.12em] text-[#ffe9b8]">
             CATAN
           </span>
-          <span className="rounded-full border border-white/25 px-2.5 py-[3px] font-mono text-[11px] tracking-[0.18em] text-[#d9ecf7]">
+          <span className="rounded-full border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 py-px font-mono text-[11px] font-bold tracking-[0.18em] text-[#7a5320]">
             {room.code}
           </span>
           <span
-            className={`rounded-full px-2.5 py-[3px] text-[10px] font-extrabold uppercase tracking-[0.08em] ${
-              isMyTurn ? "bg-[#e7f6e2] text-[#2c6b34]" : "bg-white/[0.16] text-[#eaf4fb]"
+            className={`rounded-full border-2 px-2.5 py-px text-[10px] font-extrabold uppercase tracking-[0.08em] ${
+              isMyTurn
+                ? "border-[#8a5a1e] bg-[#ffe9b8] text-[#7a5320]"
+                : "border-[#7a5a3a] bg-[#3c2415] text-[#e8d3a8]"
             }`}
           >
             {isMyTurn
@@ -219,22 +236,22 @@ export default function GameRoom({
             <TurnTimer deadlineAt={room.turnDeadlineAt} />
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {!demo && (
             <button
-              className="rounded-lg border border-white/[0.28] bg-[#0a263a]/40 px-2.5 py-[5px] text-[11px] font-semibold text-[#eaf4fb] enabled:hover:bg-[#0a263a]/70"
+              className="inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5"
               type="button"
               onClick={onCopyInvite}
             >
-              ↗ Invitar
+              <UserPlus size={13} /> Invitar
             </button>
           )}
           <button
-            className="rounded-lg border border-white/[0.28] bg-[#0a263a]/40 px-2.5 py-[5px] text-[11px] font-semibold text-[#eaf4fb] enabled:hover:bg-[#0a263a]/70"
+            className="inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5"
             type="button"
             onClick={onLeave}
           >
-            {demo ? "← Volver" : "× Salir"}
+            <LogOut size={13} /> {demo ? "Volver" : "Salir"}
           </button>
         </div>
       </header>
@@ -291,12 +308,12 @@ export default function GameRoom({
           )}
 
           {!demo && hint && (
-            <div className="absolute bottom-3 left-1/2 z-30 max-w-[min(560px,calc(100%-24px))] -translate-x-1/2 rounded-[10px] bg-[#0e3046]/[0.88] px-3.5 py-2 text-center text-xs font-semibold text-[#f4f9fd] shadow-[0_4px_14px_rgba(5,25,40,0.35)]">
+            <div className="absolute bottom-3 left-1/2 z-30 max-w-[min(560px,calc(100%-24px))] -translate-x-1/2 rounded-2xl border-2 border-[#8a5a1e] bg-[#4a2e1c]/95 px-3.5 py-1.5 text-center text-xs font-semibold text-[#ffe9b8] shadow-[0_4px_0_rgba(30,16,6,0.4)]">
               {hint}
               {selectedCard?.type === "road-building" && (
                 <>
                   <button
-                    className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
+                    className="ml-2.5 border-0 bg-transparent font-display font-extrabold text-[#ffd76a] underline disabled:opacity-50"
                     type="button"
                     disabled={busy || selectedRoadIds.length === 0}
                     onClick={playRoadBuilding}
@@ -304,7 +321,7 @@ export default function GameRoom({
                     Colocar
                   </button>
                   <button
-                    className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
+                    className="ml-2.5 border-0 bg-transparent font-display font-extrabold text-[#ffd76a] underline disabled:opacity-50"
                     type="button"
                     onClick={resetSelection}
                   >
@@ -314,7 +331,7 @@ export default function GameRoom({
               )}
               {selectedCard?.type === "knight" && (
                 <button
-                  className="ml-2.5 border-0 bg-transparent font-extrabold text-[#ffd76a] underline disabled:opacity-50"
+                  className="ml-2.5 border-0 bg-transparent font-display font-extrabold text-[#ffd76a] underline disabled:opacity-50"
                   type="button"
                   onClick={resetSelection}
                 >
@@ -346,15 +363,15 @@ export default function GameRoom({
             onSend={onSendMessage}
           />
           <section
-            className="shrink-0 rounded-xl border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_4px_14px_rgba(8,30,48,0.22)]"
+            className="shrink-0 rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-2.5 py-1.5 shadow-[0_4px_0_rgba(74,44,18,0.25)]"
             aria-label="Banco"
           >
-            <div className="mb-1.5 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-soft">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#a08a5e]">
               <span className="flex items-center gap-1.5">
-                <img className="h-5 w-auto" src={BANK_FILE} alt="" draggable={false} />
+                <Landmark size={13} />
                 Banco
               </span>
-              <span>Cartas restantes</span>
+              <span>Restantes</span>
             </div>
             <div className="flex gap-1">
               {RESOURCES.map((resource) => (
@@ -364,12 +381,12 @@ export default function GameRoom({
                   title={RESOURCE_NAMES[resource]}
                 >
                   <img
-                    className="h-[42px] w-auto drop-shadow-[0_2px_3px_rgba(0,0,0,0.25)]"
+                    className="h-9 w-auto drop-shadow-[0_2px_2px_rgba(0,0,0,0.25)]"
                     src={RESOURCE_CARD_FILES[resource]}
                     alt={RESOURCE_NAMES[resource]}
                     draggable={false}
                   />
-                  <span className="absolute -bottom-1 right-0 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[10px] font-black text-white">
+                  <span className="absolute -bottom-1 right-0 grid h-[17px] min-w-[17px] place-items-center rounded-full border-2 border-[#f7ecd4] bg-[#274b66] text-[10px] font-black text-white">
                     {game.bank[resource]}
                   </span>
                 </div>
@@ -381,8 +398,8 @@ export default function GameRoom({
 
       <footer className="z-[25] shrink-0 px-2 pb-2">
         {demo ? (
-          <div className="flex items-center justify-center rounded-[14px] border border-black/[0.18] bg-paper-soft px-2.5 py-2 shadow-[0_-2px_14px_rgba(8,30,48,0.25)]">
-            <p className="max-w-[560px] text-center text-[10px] text-[#8b8271]">
+          <div className="flex items-center justify-center rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-2.5 py-2 shadow-[0_4px_0_rgba(74,44,18,0.25)]">
+            <p className="max-w-[560px] text-center text-[10px] font-semibold text-[#a08a5e]">
               Vista de muestra: así se ve una partida con el comercio global y el tablero al estilo Colonist.
             </p>
           </div>
@@ -596,69 +613,87 @@ function PlayerPanel({
       ? `${stat.turns} ${stat.turns === 1 ? "turno" : "turnos"} · último ${formatDuration(stat.lastTurnMs)}`
       : "Todavía no jugó turnos";
   const tone = player.isCurrentPlayer
-    ? `border-[#ffd76a] ring-2 ring-[#ffd76a]/55 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.94]"}`
-    : `border-black/15 ${self ? "bg-[#eff9e8]/95" : "bg-white/[0.92]"}`;
+    ? "border-[#d9a44a] bg-[#fff3d6] ring-2 ring-[#d9a44a]/40"
+    : self
+      ? "border-[#c9a86a] bg-[#fdf6e3]"
+      : "border-[#c9a86a] bg-[#f7ecd4]";
 
   return (
     <article
-      className={`group relative flex items-center gap-2 rounded-[10px] border px-2 py-[7px] shadow-[0_2px_6px_rgba(10,35,55,0.18)] max-[940px]:min-w-[190px] ${tone} ${
+      className={`group relative rounded-2xl border-2 px-2.5 py-2 shadow-[0_3px_0_rgba(74,44,18,0.25)] max-[940px]:min-w-[190px] ${tone} ${
         offline ? "opacity-70" : ""
       }`}
       title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail})`}
     >
-      <span
-        className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border-2 border-white/85 text-xs font-black text-white shadow-[0_2px_5px_rgba(0,0,0,0.25)] [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]"
-        style={{ backgroundColor: player.color }}
-      >
-        {player.name.slice(0, 2).toUpperCase()}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-1.5">
-          <strong className="block truncate text-xs font-extrabold text-[#33302a]">
-            {isBot ? "🤖 " : ""}
-            {player.name}
-            {self ? " (vos)" : ""}
-          </strong>
-          <span className="inline-flex items-center gap-[3px] rounded-full bg-[#f3e3b8] px-[7px] py-px text-[11px] font-black text-[#7a5a12]">
-            🏅 {points}
-          </span>
-        </div>
-        <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[#7a7364]">
-          <span>
-            🎴 <b className="font-extrabold text-[#4c463a]">{player.resourceCardCount}</b>
-          </span>
-          <span>
-            🃏 <b className="font-extrabold text-[#4c463a]">{player.developmentCardCount}</b>
-          </span>
-          <span>
-            ⚔ <b className="font-extrabold text-[#4c463a]">{player.playedKnights}</b>
-          </span>
-          <span>
-            🛤 <b className="font-extrabold text-[#4c463a]">{player.roadsBuilt}</b>
-          </span>
-          {offline && <span className="text-[9px] font-bold text-[#a2564a]">Desconectado</span>}
+      <div className="flex items-center gap-2">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#8a5a1e] font-display text-xs font-extrabold text-white shadow-[0_2px_0_rgba(74,44,18,0.35)]"
+          style={{ backgroundColor: player.color }}
+        >
+          {player.name.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1.5">
+            <strong className="block truncate font-display text-[13px] font-extrabold text-[#4a2c12]">
+              {isBot ? "🤖 " : ""}
+              {player.name}
+              {self ? " (vos)" : ""}
+            </strong>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[11px] font-black text-[#7a5320]">
+              <Crown size={11} /> {points}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2.5 text-[11px] font-bold text-[#7a5320]">
+            <span className="inline-flex items-center gap-1" title="Cartas de recurso">
+              <Layers size={13} />
+              {player.resourceCardCount}
+            </span>
+            <span className="inline-flex items-center gap-1" title="Cartas de desarrollo">
+              <ScrollText size={13} />
+              {player.developmentCardCount}
+            </span>
+            <span className="inline-flex items-center gap-1" title="Caballeros jugados">
+              <Swords size={13} />
+              {player.playedKnights}
+            </span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-[10px] font-semibold text-[#a08a5e]">
+            <span className="inline-flex items-center gap-1" title="Caminos construidos">
+              <Route size={12} />
+              {player.roadsBuilt}
+            </span>
+            <span className="inline-flex items-center gap-1" title="Poblados construidos">
+              <Home size={12} />
+              {player.settlementsBuilt}
+            </span>
+            <span className="inline-flex items-center gap-1" title="Ciudades construidas">
+              <Castle size={12} />
+              {player.citiesBuilt}
+            </span>
+            {offline && <span className="font-bold text-[#a4462f]">Desconectado</span>}
+          </div>
         </div>
       </div>
       {(longestRoad || largestArmy) && (
-        <div className="flex flex-col gap-0.5">
+        <div className="mt-1 flex flex-wrap gap-1">
           {longestRoad && (
-            <span className="rounded-md bg-[#e2ecd6] px-[5px] py-0.5 text-center text-[9px] font-black text-[#3f6b3a]">
-              Camino
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]">
+              <Route size={10} /> Camino más largo
             </span>
           )}
           {largestArmy && (
-            <span className="rounded-md bg-[#f0e0d6] px-[5px] py-0.5 text-center text-[9px] font-black text-[#92472f]">
-              Ejército
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#f6dcd6] px-1.5 py-0.5 text-[9px] font-extrabold text-[#8a3a22]">
+              <Swords size={10} /> Ejército más grande
             </span>
           )}
         </div>
       )}
-      <div className="pointer-events-none absolute inset-0 z-10 hidden flex-col items-center justify-center gap-0.5 rounded-[10px] bg-[#10344b]/95 px-2 text-center group-hover:flex">
-        <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#9fc3dc]">
+      <div className="pointer-events-none absolute inset-0 z-10 hidden flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#4a2e1c]/95 px-2 text-center group-hover:flex">
+        <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#e8d3a8]">
           Ritmo de juego
         </span>
-        <span className="text-[12px] font-black text-[#f4f9fd]">{averageLabel}</span>
-        <span className="text-[9px] font-semibold text-[#cfe3f2]">{statsDetail}</span>
+        <span className="font-display text-[12px] font-extrabold text-[#ffe9b8]">{averageLabel}</span>
+        <span className="text-[9px] font-semibold text-[#d9bd8d]">{statsDetail}</span>
       </div>
     </article>
   );
