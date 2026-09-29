@@ -34,6 +34,8 @@ const DISCARD_WINDOW_MS = 20_000;
 const ROBBER_WINDOW_MS = 20_000;
 const OFFER_WINDOW_MS = 15_000;
 const TRADE_RESPONSE_WINDOW_MS = 5_000;
+const SETUP_SETTLEMENT_WINDOW_MS = 120_000;
+const SETUP_ROAD_WINDOW_MS = 20_000;
 
 type RoomMember = RoomDocument["players"][number];
 
@@ -53,7 +55,8 @@ interface GameFlow {
 }
 
 type GameStep =
-  | "setup"
+  | "setup-settlement"
+  | "setup-road"
   | "roll"
   | "discard"
   | "robber"
@@ -229,6 +232,10 @@ function isBotPlayer(room: RoomDocument, playerId: string): boolean {
   return room.players.some((player) => player.id === playerId && player.isBot === true);
 }
 
+function isPaused(room: RoomDocument): boolean {
+  return room.pausedAt !== undefined && room.pausedAt !== null;
+}
+
 function botsNeedingDiscard(room: RoomDocument, state: GameState): string[] {
   return Object.keys(state.pendingDiscards)
     .filter((playerId) => isBotPlayer(room, playerId))
@@ -340,8 +347,9 @@ function deadlineAction(state: GameState): GameAction | null {
 function stepOf(state: GameState): GameStep {
   switch (state.phase) {
     case "setup-settlement":
+      return "setup-settlement";
     case "setup-road":
-      return "setup";
+      return "setup-road";
     case "awaiting-roll":
       return "roll";
     case "discard":
@@ -361,6 +369,10 @@ function stepOf(state: GameState): GameStep {
 
 function stepDurationMs(step: GameStep, limitSeconds: number): number | null {
   switch (step) {
+    case "setup-settlement":
+      return SETUP_SETTLEMENT_WINDOW_MS;
+    case "setup-road":
+      return SETUP_ROAD_WINDOW_MS;
     case "roll":
       return ROLL_WINDOW_MS;
     case "discard":
@@ -370,7 +382,6 @@ function stepDurationMs(step: GameStep, limitSeconds: number): number | null {
       return ROBBER_WINDOW_MS;
     case "trade":
       return OFFER_WINDOW_MS;
-    case "setup":
     case "main":
       return limitSeconds > 0 ? limitSeconds * 1000 : null;
     case "finished":
@@ -496,8 +507,10 @@ function deadlineMessage(step: GameStep, playerName: string): string {
       return `Se agotó el tiempo de ${playerName} para elegir a quién robar; se eligió al azar.`;
     case "trade":
       return "Se agotó el tiempo del comercio; se resolvió automáticamente.";
-    case "setup":
-      return "Se agotó el tiempo de colocación inicial; se colocó al azar.";
+    case "setup-settlement":
+      return "Se agotó el tiempo para colocar el poblado inicial; se colocó al azar.";
+    case "setup-road":
+      return "Se agotó el tiempo para colocar el camino inicial; se colocó al azar.";
     case "main":
       return `Se agotó el tiempo de ${playerName}; se pasó el turno.`;
     case "finished":
@@ -559,6 +572,61 @@ async function commitGameFlow(
       expectedKey: botKey,
     });
   }
+}
+
+async function applyPauseOutcome(
+  ctx: MutationCtx,
+  room: RoomDocument,
+  request: { mode: "pause" | "resume"; requestedBy: string },
+): Promise<void> {
+  const now = Date.now();
+  const actorName = playerName(room, request.requestedBy);
+
+  if (request.mode === "pause") {
+    await ctx.db.patch(room._id, {
+      pauseRequest: null,
+      pausedAt: now,
+      pauseRemainingMs:
+        room.turnDeadlineAt !== undefined && room.turnDeadlineAt !== null
+          ? Math.max(0, room.turnDeadlineAt - now)
+          : null,
+      pauseTradeRemainingMs:
+        room.tradeRespondDeadlineAt !== undefined && room.tradeRespondDeadlineAt !== null
+          ? Math.max(0, room.tradeRespondDeadlineAt - now)
+          : null,
+      turnDeadlineAt: undefined,
+      tradeRespondDeadlineAt: undefined,
+      updatedAt: now,
+    });
+    await writeEvent(ctx, room, request.requestedBy, actorName, "system", "La partida se pausó.");
+    return;
+  }
+
+  const flow = gameFlowFromRoom(room);
+  if (!flow) return;
+  const pausedAt = room.pausedAt ?? now;
+  const pauseDuration = Math.max(0, now - pausedAt);
+  flow.turnStartedAt = flow.turnStartedAt !== null ? flow.turnStartedAt + pauseDuration : null;
+  flow.turnDeadlineAt =
+    room.pauseRemainingMs !== undefined && room.pauseRemainingMs !== null
+      ? now + room.pauseRemainingMs
+      : null;
+  flow.tradeRespondDeadlineAt =
+    room.pauseTradeRemainingMs !== undefined && room.pauseTradeRemainingMs !== null
+      ? now + room.pauseTradeRemainingMs
+      : null;
+
+  await ctx.db.patch(room._id, {
+    pauseRequest: null,
+    pausedAt: null,
+    pauseRemainingMs: null,
+    pauseTradeRemainingMs: null,
+    updatedAt: now,
+  });
+  await writeEvent(ctx, room, request.requestedBy, actorName, "system", "La partida se reanudó.");
+  const schedulingRoom = { ...room };
+  delete schedulingRoom.botTurnKey;
+  await commitGameFlow(ctx, schedulingRoom, flow);
 }
 
 function isValidTurnTimeLimit(seconds: number): boolean {
@@ -778,11 +846,7 @@ export const startGame = mutation({
     await commitGameFlow(ctx, room, {
       state: gameState,
       turnStartedAt: now,
-      turnDeadlineAt: deadlineFor(
-        "setup",
-        now,
-        room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS,
-      ),
+      turnDeadlineAt: deadlineFor("setup-settlement", now, room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS),
       turnResumeRemainingMs: null,
       tradeRespondDeadlineAt: null,
       turnStats: {},
@@ -832,6 +896,9 @@ export const getRoom = query({
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS,
       turnDeadlineAt: room.turnDeadlineAt ?? null,
       tradeRespondDeadlineAt: room.tradeRespondDeadlineAt ?? null,
+      pausedAt: room.pausedAt ?? null,
+      pauseRemainingMs: room.pauseRemainingMs ?? null,
+      pauseRequest: room.pauseRequest ?? null,
       turnStats: room.turnStats ?? {},
       game: gameState ? getPlayerView(gameState, member.id) : null,
       legal: gameState
@@ -970,6 +1037,9 @@ export const applyGameAction = mutation({
     if (room.status !== "playing" || !room.gameState) {
       fail("GAME_NOT_RUNNING", "La sala todavía no tiene una partida en curso.");
     }
+    if (isPaused(room)) {
+      fail("GAME_PAUSED", "La partida está en pausa; reanúdenla para seguir jugando.");
+    }
     const flow = gameFlowFromRoom(room);
     if (!flow) fail("GAME_NOT_RUNNING", "La sala todavía no tiene una partida en curso.");
 
@@ -989,11 +1059,105 @@ export const applyGameAction = mutation({
   },
 });
 
+export const requestPause = mutation({
+  args: {
+    code: v.string(),
+    playerToken: v.string(),
+    mode: v.union(v.literal("pause"), v.literal("resume")),
+  },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "playing") {
+      fail("GAME_NOT_RUNNING", "La sala todavía no tiene una partida en curso.");
+    }
+    const paused = isPaused(room);
+    if (args.mode === "pause" && paused) fail("ALREADY_PAUSED", "La partida ya está en pausa.");
+    if (args.mode === "resume" && !paused) fail("NOT_PAUSED", "La partida no está en pausa.");
+    if (room.pauseRequest) fail("PAUSE_VOTE_ACTIVE", "Ya hay una votación en curso.");
+
+    const votes: Record<string, boolean> = {};
+    for (const player of room.players) {
+      if (player.id === member.id || player.isBot === true) votes[player.id] = true;
+    }
+    const request = {
+      mode: args.mode,
+      requestedBy: member.id,
+      votes,
+      createdAt: Date.now(),
+    };
+    const label = args.mode === "pause" ? "pausar la partida" : "reanudar la partida";
+    await writeEvent(ctx, room, member.id, member.name, "system", `${member.name} propuso ${label}.`);
+
+    if (room.players.every((player) => votes[player.id] === true)) {
+      await applyPauseOutcome(ctx, room, request);
+    } else {
+      await ctx.db.patch(room._id, { pauseRequest: request, updatedAt: Date.now() });
+    }
+    return { requested: true };
+  },
+});
+
+export const votePause = mutation({
+  args: { code: v.string(), playerToken: v.string(), approve: v.boolean() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    const request = room.pauseRequest;
+    if (!request) fail("NO_PAUSE_VOTE", "No hay una votación de pausa en curso.");
+    const now = Date.now();
+
+    if (!args.approve) {
+      await ctx.db.patch(room._id, { pauseRequest: null, updatedAt: now });
+      await writeEvent(
+        ctx,
+        room,
+        member.id,
+        member.name,
+        "system",
+        `${member.name} rechazó la propuesta.`,
+      );
+      return { approved: false };
+    }
+
+    const votes = { ...request.votes, [member.id]: true };
+    if (room.players.every((player) => votes[player.id] === true)) {
+      await applyPauseOutcome(ctx, room, {
+        mode: request.mode,
+        requestedBy: request.requestedBy,
+      });
+    } else {
+      await ctx.db.patch(room._id, { pauseRequest: { ...request, votes }, updatedAt: now });
+    }
+    return { approved: true };
+  },
+});
+
+export const cancelPauseRequest = mutation({
+  args: { code: v.string(), playerToken: v.string() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    const request = room.pauseRequest;
+    if (!request) fail("NO_PAUSE_VOTE", "No hay una votación en curso.");
+    if (request.requestedBy !== member.id && member.id !== room.hostPlayerId) {
+      fail("UNAUTHORIZED", "Solo quien la propuso o el anfitrión pueden cancelarla.");
+    }
+    await ctx.db.patch(room._id, { pauseRequest: null, updatedAt: Date.now() });
+    await writeEvent(
+      ctx,
+      room,
+      member.id,
+      member.name,
+      "system",
+      `${member.name} canceló la votación.`,
+    );
+    return { cancelled: true };
+  },
+});
+
 export const playBotTurn = internalMutation({
   args: { roomId: v.id("rooms"), expectedKey: v.string() },
   handler: async (ctx, args) => {
     const room = await ctx.db.get("rooms", args.roomId);
-    if (!room || room.status !== "playing") return null;
+    if (!room || room.status !== "playing" || isPaused(room)) return null;
     let flow = gameFlowFromRoom(room);
     if (!flow) return null;
     if (botActionKey(room, flow.state) !== args.expectedKey) return null;
@@ -1034,7 +1198,7 @@ export const enforceTurnTimeout = internalMutation({
   args: { roomId: v.id("rooms"), expectedDeadline: v.number() },
   handler: async (ctx, args) => {
     const room = await ctx.db.get("rooms", args.roomId);
-    if (!room || room.status !== "playing") return null;
+    if (!room || room.status !== "playing" || isPaused(room)) return null;
     if (room.turnDeadlineAt !== args.expectedDeadline) return null;
     if (Date.now() < args.expectedDeadline) return null;
     let flow = gameFlowFromRoom(room);
@@ -1073,7 +1237,7 @@ export const expireTradeResponses = internalMutation({
   args: { roomId: v.id("rooms"), expectedDeadline: v.number() },
   handler: async (ctx, args) => {
     const room = await ctx.db.get("rooms", args.roomId);
-    if (!room || room.status !== "playing") return null;
+    if (!room || room.status !== "playing" || isPaused(room)) return null;
     if (room.tradeRespondDeadlineAt !== args.expectedDeadline) return null;
     if (Date.now() < args.expectedDeadline) return null;
     let flow = gameFlowFromRoom(room);

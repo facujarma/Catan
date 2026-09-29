@@ -183,6 +183,9 @@ export function createDemoSnapshot(): {
     turnTimeLimitSeconds: 60,
     turnDeadlineAt: timestamp + 45_000,
     tradeRespondDeadlineAt: null,
+    pausedAt: null,
+    pauseRemainingMs: null,
+    pauseRequest: null,
     turnStats: {
       "demo-you": { totalMs: 96_000, turns: 3, lastTurnMs: 28_000 },
       "demo-ana": { totalMs: 74_000, turns: 2, lastTurnMs: 41_000 },

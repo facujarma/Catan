@@ -15,6 +15,9 @@ export default function DemoPreview({ onBack }: { onBack: () => void }) {
         demo
         onAction={async () => undefined}
         onSendMessage={async () => undefined}
+        onRequestPause={async () => undefined}
+        onVotePause={async () => undefined}
+        onCancelPauseRequest={async () => undefined}
         onLeave={onBack}
         onCopyInvite={() => undefined}
       />

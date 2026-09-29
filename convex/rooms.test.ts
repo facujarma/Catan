@@ -192,25 +192,38 @@ describe("bots", () => {
     expect(room.game?.currentPlayerId).not.toBe(bot.id);
   });
 
-  test("el tiempo por turno resuelve el turno cuando se agota", async () => {
+  test("la colocación inicial da 2 minutos por poblado y 20 segundos por camino", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
     await startRoomWithBots(t, { bots: 2, limit: 15 });
 
     let room = await snapshot(t);
     expect(room.turnTimeLimitSeconds).toBe(15);
-    expect(room.turnDeadlineAt).not.toBeNull();
+    expect(room.game?.phase).toBe("setup-settlement");
+    const settlementWindow = (room.turnDeadlineAt ?? 0) - Date.now();
+    expect(settlementWindow).toBeGreaterThan(119_000);
+    expect(settlementWindow).toBeLessThanOrEqual(120_000);
 
     const host = room.game?.players.find((player) => player.id === HOST.playerId);
     expect(host?.settlementsBuilt).toBe(0);
 
-    vi.advanceTimersByTime(16_000);
+    vi.advanceTimersByTime(120_500);
     await t.finishInProgressScheduledFunctions();
 
     room = await snapshot(t);
-    const afterTimeout = room.game?.players.find((player) => player.id === HOST.playerId);
-    expect(afterTimeout?.settlementsBuilt).toBe(1);
-    expect(afterTimeout?.roadsBuilt).toBe(1);
+    const afterSettlement = room.game?.players.find((player) => player.id === HOST.playerId);
+    expect(afterSettlement?.settlementsBuilt).toBe(1);
+    expect(room.game?.phase).toBe("setup-road");
+    const roadWindow = (room.turnDeadlineAt ?? 0) - Date.now();
+    expect(roadWindow).toBeGreaterThan(19_000);
+    expect(roadWindow).toBeLessThanOrEqual(20_000);
+
+    vi.advanceTimersByTime(20_500);
+    await t.finishInProgressScheduledFunctions();
+
+    room = await snapshot(t);
+    const afterRoad = room.game?.players.find((player) => player.id === HOST.playerId);
+    expect(afterRoad?.roadsBuilt).toBe(1);
     expect(room.game?.currentPlayerId).not.toBe(HOST.playerId);
     expect(room.turnDeadlineAt).not.toBeNull();
   });
@@ -310,6 +323,109 @@ describe("bots", () => {
         seconds: 5,
       }),
     ).rejects.toThrow(/límite/i);
+  });
+
+  test("la pausa con bots se aprueba al instante y congela el tiempo", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await startRoomWithBots(t, { bots: 2, limit: 60 });
+
+    let room = await snapshot(t);
+    expect(room.turnDeadlineAt).not.toBeNull();
+    expect(room.pausedAt).toBeNull();
+
+    await t.mutation(api.rooms.requestPause, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      mode: "pause",
+    });
+    room = await snapshot(t);
+    expect(room.pausedAt).not.toBeNull();
+    expect(room.turnDeadlineAt).toBeNull();
+    expect(room.pauseRequest).toBeNull();
+    expect(room.pauseRemainingMs).toBeGreaterThan(0);
+
+    await expect(
+      act(t, {
+        type: "place-setup-settlement",
+        vertexId: room.legal.settlementVertexIds[0]!,
+      }),
+    ).rejects.toThrow(/pausa/i);
+
+    vi.advanceTimersByTime(120_000);
+    await t.finishInProgressScheduledFunctions();
+    room = await snapshot(t);
+    const host = room.game?.players.find((player) => player.id === HOST.playerId);
+    expect(host?.settlementsBuilt).toBe(0);
+    expect(room.pausedAt).not.toBeNull();
+
+    await t.mutation(api.rooms.requestPause, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      mode: "resume",
+    });
+    room = await snapshot(t);
+    expect(room.pausedAt).toBeNull();
+    expect(room.turnDeadlineAt).not.toBeNull();
+    const restored = (room.turnDeadlineAt ?? 0) - Date.now();
+    expect(restored).toBeGreaterThan(0);
+    expect(restored).toBeLessThanOrEqual(120_000);
+  });
+
+  test("la pausa necesita el voto de todos y un rechazo la cancela", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    const outro = {
+      playerId: "outro-player-00000000000000",
+      playerToken: "outro-token-00000000000000000000000000000",
+    };
+    await t.mutation(api.rooms.joinRoom, { code: CODE, ...outro, name: "Outro" });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: outro.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    await t.mutation(api.rooms.requestPause, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      mode: "pause",
+    });
+    let room = await snapshot(t);
+    expect(room.pausedAt).toBeNull();
+    expect(room.pauseRequest).not.toBeNull();
+    expect(room.pauseRequest?.votes[outro.playerId]).toBeUndefined();
+
+    await t.mutation(api.rooms.votePause, {
+      code: CODE,
+      playerToken: outro.playerToken,
+      approve: false,
+    });
+    room = await snapshot(t);
+    expect(room.pauseRequest).toBeNull();
+    expect(room.pausedAt).toBeNull();
+
+    await t.mutation(api.rooms.requestPause, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      mode: "pause",
+    });
+    await t.mutation(api.rooms.votePause, {
+      code: CODE,
+      playerToken: outro.playerToken,
+      approve: true,
+    });
+    room = await snapshot(t);
+    expect(room.pausedAt).not.toBeNull();
+    expect(room.pauseRequest).toBeNull();
   });
 });
 

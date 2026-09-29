@@ -20,6 +20,13 @@ export interface TurnStat {
   lastTurnMs: number;
 }
 
+export interface PauseRequest {
+  mode: "pause" | "resume";
+  requestedBy: string;
+  votes: Record<string, boolean>;
+  createdAt: number;
+}
+
 export interface LegalPlacements {
   settlementVertexIds: string[];
   roadIds: string[];
@@ -38,6 +45,9 @@ export interface RoomSnapshot {
   turnTimeLimitSeconds: number;
   turnDeadlineAt: number | null;
   tradeRespondDeadlineAt: number | null;
+  pausedAt: number | null;
+  pauseRemainingMs: number | null;
+  pauseRequest: PauseRequest | null;
   turnStats: Record<string, TurnStat>;
   game: PlayerGameView | null;
   legal: LegalPlacements;

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { PlayerGameView } from "@catan/engine";
 import {
   GENERIC_PORT_FILE,
@@ -273,6 +274,31 @@ export default function BoardSvg({
   onHexClick,
 }: BoardSvgProps) {
   const isMyTurn = game.currentPlayerId === selfPlayerId;
+  const rolledTotal = game.lastRoll?.total ?? null;
+  const rollKey = game.lastRoll ? `${game.lastRoll.dice[0]}-${game.lastRoll.dice[1]}` : null;
+  const [rollAnimationKey, setRollAnimationKey] = useState(0);
+  const lastRollKeyRef = useRef<string | null>(rollKey);
+  const [robberFlight, setRobberFlight] = useState<{ from: string; to: string; key: number } | null>(
+    null,
+  );
+  const previousRobberHexIdRef = useRef(game.robberHexId);
+
+  useEffect(() => {
+    if (rollKey && rollKey !== lastRollKeyRef.current) {
+      lastRollKeyRef.current = rollKey;
+      setRollAnimationKey((key) => key + 1);
+    }
+  }, [rollKey]);
+
+  useEffect(() => {
+    const previous = previousRobberHexIdRef.current;
+    previousRobberHexIdRef.current = game.robberHexId;
+    if (previous === game.robberHexId) return;
+    setRobberFlight({ from: previous, to: game.robberHexId, key: Date.now() });
+    const timer = window.setTimeout(() => setRobberFlight(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [game.robberHexId]);
+
   const activeMode =
     game.phase === "setup-settlement" || game.phase === "setup-road" || game.phase === "robber"
       ? game.phase === "setup-settlement"
@@ -502,6 +528,23 @@ export default function BoardSvg({
                   })}
                 </g>
               )}
+              {rolledTotal !== null && hex.number === rolledTotal && (
+                <g key={`roll-${rollAnimationKey}`} pointerEvents="none">
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.94)}
+                    fill="#ffd76a"
+                    fillOpacity="0.4"
+                    className="animate-[rolled-glow_1.1s_ease-out_2_forwards]"
+                  />
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.94)}
+                    fill="none"
+                    stroke="#ffe9b8"
+                    strokeWidth="3.2"
+                    className="animate-[rolled-glow_1.1s_ease-out_2_forwards]"
+                  />
+                </g>
+              )}
               {isRobberTarget && (
                 <g pointerEvents="none">
                   <polygon points={pointsForHex(hex.q, hex.r, 0.92)} fill="#e5484d" fillOpacity="0.16" />
@@ -515,7 +558,7 @@ export default function BoardSvg({
                   />
                 </g>
               )}
-              {hex.id === game.robberHexId && (
+              {hex.id === game.robberHexId && !robberFlight && (
                 <g filter="url(#pawn-shadow)" pointerEvents="none">
                   <image
                     href={ROBBER_ICON_FILE}
@@ -530,6 +573,33 @@ export default function BoardSvg({
             </g>
           );
         })}
+
+        {robberFlight &&
+          (() => {
+            const fromHex = game.board.hexes.find((hex) => hex.id === robberFlight.from);
+            const toHex = game.board.hexes.find((hex) => hex.id === robberFlight.to);
+            if (!fromHex || !toHex) return null;
+            const [fromX, fromY] = project(...hexCenter(fromHex.q, fromHex.r));
+            const [toX, toY] = project(...hexCenter(toHex.q, toHex.r));
+            return (
+              <g key={robberFlight.key} pointerEvents="none" filter="url(#pawn-shadow)">
+                <image
+                  href={ROBBER_ICON_FILE}
+                  x={-21}
+                  y={-26}
+                  width="44"
+                  height="44"
+                  filter="url(#robber-tone)"
+                >
+                  <animateMotion
+                    dur="0.65s"
+                    fill="freeze"
+                    path={`M ${fromX} ${fromY} L ${toX} ${toY}`}
+                  />
+                </image>
+              </g>
+            );
+          })()}
 
         {game.board.ports.map((port) => {
           const first = vertexById.get(port.vertexIds[0]);

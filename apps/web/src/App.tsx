@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
 import { api } from "./convexApi";
 import FeedPanel from "./components/FeedPanel";
 import DemoPreview from "./components/DemoPreview";
@@ -68,6 +69,9 @@ function CatanApp() {
   const setTurnTimeLimitMutation = useMutation(api.rooms.setTurnTimeLimit);
   const startGameMutation = useMutation(api.rooms.startGame);
   const applyActionMutation = useMutation(api.rooms.applyGameAction);
+  const requestPauseMutation = useMutation(api.rooms.requestPause);
+  const votePauseMutation = useMutation(api.rooms.votePause);
+  const cancelPauseRequestMutation = useMutation(api.rooms.cancelPauseRequest);
   const heartbeatMutation = useMutation(api.rooms.heartbeat);
   const leaveRoomMutation = useMutation(api.rooms.leaveRoom);
   const sendMessageMutation = useMutation(api.rooms.sendMessage);
@@ -210,6 +214,27 @@ function CatanApp() {
     if (!roomCode) return;
     await run(() =>
       applyActionMutation({ code: roomCode, playerToken: identity.playerToken, action }),
+    );
+  };
+
+  const requestPause = async (mode: "pause" | "resume") => {
+    if (!roomCode) return;
+    await run(() =>
+      requestPauseMutation({ code: roomCode, playerToken: identity.playerToken, mode }),
+    );
+  };
+
+  const votePause = async (approve: boolean) => {
+    if (!roomCode) return;
+    await run(() =>
+      votePauseMutation({ code: roomCode, playerToken: identity.playerToken, approve }),
+    );
+  };
+
+  const cancelPauseRequest = async () => {
+    if (!roomCode) return;
+    await run(() =>
+      cancelPauseRequestMutation({ code: roomCode, playerToken: identity.playerToken }),
     );
   };
 
@@ -359,6 +384,9 @@ function CatanApp() {
         busy={busy}
         onAction={submitGameAction}
         onSendMessage={sendMessage}
+        onRequestPause={requestPause}
+        onVotePause={votePause}
+        onCancelPauseRequest={cancelPauseRequest}
         onLeave={leaveRoom}
         onCopyInvite={copyInvite}
       />,
@@ -442,13 +470,69 @@ function ConfigurationNotice({ onPreview }: { onPreview: () => void }) {
   );
 }
 
-function readError(error: unknown): string {
-  if (!(error instanceof Error)) return "Ocurrió un error al conectar con la sala.";
-  const message = error.message.replace(/^Uncaught Error:\s*/, "");
-  try {
-    const parsed = JSON.parse(message) as { data?: { message?: string }; message?: string };
-    return parsed.data?.message ?? parsed.message ?? message;
-  } catch {
-    return message;
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
   }
+  return null;
+}
+
+function readError(error: unknown): string {
+  if (error instanceof ConvexError) {
+    const data = error.data as { message?: unknown } | string | null | undefined;
+    if (typeof data === "string" && data.trim()) return data;
+    if (
+      data &&
+      typeof data === "object" &&
+      typeof data.message === "string" &&
+      data.message.trim()
+    ) {
+      return data.message;
+    }
+  }
+  if (!(error instanceof Error)) return "Ocurrió un error al conectar con la sala.";
+
+  const message = error.message.replace(/^Uncaught (Error|ConvexError):\s*/, "").trim();
+
+  const jsonCandidate = extractJsonObject(message);
+  if (jsonCandidate) {
+    try {
+      const parsed = JSON.parse(jsonCandidate) as {
+        data?: { message?: string };
+        message?: string;
+      };
+      const extracted = parsed.data?.message ?? parsed.message;
+      if (extracted) return extracted;
+    } catch {
+      // sigue con el fallback por regex
+    }
+  }
+
+  const messageMatch = message.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (messageMatch?.[1]) {
+    try {
+      return JSON.parse(`"${messageMatch[1]}"`) as string;
+    } catch {
+      return messageMatch[1];
+    }
+  }
+
+  return message || "Ocurrió un error al conectar con la sala.";
 }

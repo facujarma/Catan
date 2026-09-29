@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { RESOURCES } from "@catan/engine";
-import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/engine";
+import type {
+  HeldDevelopmentCard,
+  PlayerGameView,
+  PlayerPublicView,
+  Resource,
+} from "@catan/engine";
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
-import { Landmark, LogOut, UserPlus } from "lucide-react";
+import { Crown, Landmark, LogOut, Settings, UserPlus } from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
 import {
   BANK_FILE,
@@ -16,6 +22,7 @@ import {
 import {
   CG_BUTTON_ACCEPT,
   CG_BUTTON_NEUTRAL,
+  CG_BUTTON_REJECT,
   MODAL,
   MODAL_ACTIONS,
   MODAL_BACKDROP,
@@ -31,6 +38,9 @@ interface GameRoomProps {
   demo?: boolean;
   onAction: (action: GameActionPayload) => Promise<void>;
   onSendMessage: (body: string) => Promise<void>;
+  onRequestPause: (mode: "pause" | "resume") => Promise<void>;
+  onVotePause: (approve: boolean) => Promise<void>;
+  onCancelPauseRequest: () => Promise<void>;
   onLeave: () => void;
   onCopyInvite: () => void;
 }
@@ -48,10 +58,16 @@ export default function GameRoom({
   demo = false,
   onAction,
   onSendMessage,
+  onRequestPause,
+  onVotePause,
+  onCancelPauseRequest,
   onLeave,
   onCopyInvite,
 }: GameRoomProps) {
   const game = room.game!;
+  const paused = !demo && room.pausedAt !== null;
+  const pauseRequest = room.pauseRequest;
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [mode, setMode] = useState<BoardMode>(null);
   const [selectedCard, setSelectedCard] = useState<HeldDevelopmentCard | null>(null);
   const [selectedRoadIds, setSelectedRoadIds] = useState<string[]>([]);
@@ -79,16 +95,17 @@ export default function GameRoom({
   };
 
   const handleHexClick = (hexId: string) => {
-    if (game.phase !== "robber" || !isMyTurn) return;
+    if (paused || game.phase !== "robber" || !isMyTurn) return;
     void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
   };
 
   const chooseVictim = (victimId: string) => {
+    if (paused) return;
     void onAction({ type: "choose-robber-victim", victimId }).then(resetSelection);
   };
 
   const handleVertexClick = (vertexId: string) => {
-    if (!isMyTurn) return;
+    if (paused || !isMyTurn) return;
     if (game.phase === "setup-settlement") {
       void onAction({ type: "place-setup-settlement", vertexId }).then(resetSelection);
     } else if (mode === "settlement") {
@@ -99,7 +116,7 @@ export default function GameRoom({
   };
 
   const handleEdgeClick = (edgeId: string) => {
-    if (!isMyTurn) return;
+    if (paused || !isMyTurn) return;
     if (game.phase === "setup-road") {
       void onAction({ type: "place-setup-road", edgeId }).then(resetSelection);
     } else if (mode === "road") {
@@ -169,6 +186,90 @@ export default function GameRoom({
   const otherPlayers = game.players.filter((player) => player.id !== room.selfPlayerId);
   const selfPlayer = game.players.find((player) => player.id === room.selfPlayerId);
 
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (demo || room.turnDeadlineAt === null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [demo, room.turnDeadlineAt]);
+  const remainingMs = room.turnDeadlineAt !== null ? Math.max(0, room.turnDeadlineAt - now) : null;
+  const alarmActive =
+    !demo &&
+    isMyTurn &&
+    game.phase !== "finished" &&
+    game.phase !== "awaiting-roll" &&
+    remainingMs !== null &&
+    remainingMs <= 8_000;
+
+  const [flyingCards, setFlyingCards] = useState<
+    Array<{ id: string; resource: Resource; from: { x: number; y: number }; to: { x: number; y: number }; delay: number }>
+  >([]);
+  const previousCountsRef = useRef<Record<string, number> | null>(null);
+
+  useEffect(() => {
+    const counts: Record<string, number> = {};
+    for (const player of game.players) counts[player.id] = player.resourceCardCount;
+    const previousCounts = previousCountsRef.current;
+    previousCountsRef.current = counts;
+
+    const roll = game.lastRoll;
+    if (demo || !roll || roll.total === 7 || !previousCounts) return;
+
+    const produced = computeProduction(game, roll.total);
+    const gainedByPlayer: Record<string, number> = {};
+    const isProduction = game.players.every((player) => {
+      const expected = produced[player.id]?.length ?? 0;
+      const actual = (counts[player.id] ?? 0) - (previousCounts[player.id] ?? 0);
+      gainedByPlayer[player.id] = actual;
+      return actual === expected;
+    });
+    if (!isProduction) return;
+
+    const bankElement = document.getElementById("bank-panel");
+    if (!bankElement) return;
+    const bankRect = bankElement.getBoundingClientRect();
+    const flights: Array<{
+      id: string;
+      resource: Resource;
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      delay: number;
+    }> = [];
+
+    for (const player of game.players) {
+      const gained = gainedByPlayer[player.id] ?? 0;
+      if (gained <= 0) continue;
+      const target = document.getElementById(`player-card-${player.id}`);
+      if (!target) continue;
+      const targetRect = target.getBoundingClientRect();
+      const resources = produced[player.id] ?? [];
+      for (let index = 0; index < gained; index += 1) {
+        flights.push({
+          id: `${player.id}-${roll.dice.join("-")}-${index}`,
+          resource: resources[index] ?? resources[0] ?? "wood",
+          from: { x: bankRect.left + bankRect.width / 2, y: bankRect.top + bankRect.height / 2 },
+          to: { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 },
+          delay: index * 110,
+        });
+      }
+    }
+
+    if (flights.length === 0) return;
+    setFlyingCards(flights);
+    const total = 1_000 + Math.max(...flights.map((flight) => flight.delay));
+    const timer = window.setTimeout(() => setFlyingCards([]), total);
+    return () => window.clearTimeout(timer);
+  }, [demo, game.players, game.lastRoll]);
+
+  useEffect(() => {
+    if (!paused) return;
+    setMode(null);
+    setSelectedCard(null);
+    setSelectedRoadIds([]);
+    setPlentyResources([]);
+    setTradeComposer(null);
+  }, [paused]);
+
   const hint = (() => {
     if (game.phase === "finished") return null;
     if (selectedCard?.type === "road-building") {
@@ -222,8 +323,19 @@ export default function GameRoom({
               ? "Tu turno"
               : `Turno de ${currentIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </span>
-          {!demo && game.phase !== "finished" && room.turnDeadlineAt !== null && (
+          {!demo && !paused && game.phase !== "finished" && room.turnDeadlineAt !== null && (
             <TurnTimer deadlineAt={room.turnDeadlineAt} />
+          )}
+          {paused && (
+            <span className="rounded-full border-2 border-[#7a5a3a] bg-[#3c2415] px-2.5 py-[2px] text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#ffd76a]">
+              ⏸ En pausa
+              {room.pauseRemainingMs !== null ? ` · ${formatClock(room.pauseRemainingMs)}` : ""}
+            </span>
+          )}
+          {!paused && pauseRequest && (
+            <span className="rounded-full border-2 border-[#7a5a3a] bg-[#3c2415] px-2.5 py-[2px] text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#e8d3a8]">
+              Votación {pauseRequest.mode === "pause" ? "de pausa" : "de reanudación"}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
@@ -275,7 +387,11 @@ export default function GameRoom({
           )}
         </aside>
 
-        <section className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[0_4px_0_rgba(30,16,6,0.35),inset_0_0_0_1px_rgba(255,255,255,0.12)]">
+        <section
+          className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[0_4px_0_rgba(30,16,6,0.35),inset_0_0_0_1px_rgba(255,255,255,0.12)] ${
+            alarmActive ? "alarm-active" : ""
+          }`}
+        >
           <BoardSvg
             game={game}
             legal={demo ? emptyLegalPlacements : room.legal}
@@ -287,7 +403,19 @@ export default function GameRoom({
             onHexClick={handleHexClick}
           />
 
-          {!demo && game.phase === "trade" && offer && (
+          {alarmActive && (
+            <div className="alarm-overlay pointer-events-none absolute inset-0 z-[4] rounded-2xl" />
+          )}
+
+          {paused && (
+            <div className="absolute inset-0 z-[6] grid place-items-center bg-[#2a1810]/45">
+              <span className="rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-5 py-2.5 font-display text-base font-extrabold text-[#4a2c12] shadow-[0_4px_0_rgba(74,44,18,0.35)]">
+                ⏸ Partida en pausa
+              </span>
+            </div>
+          )}
+
+          {!demo && !paused && game.phase === "trade" && offer && (
             <TradeOfferPanel
               game={game}
               selfPlayerId={room.selfPlayerId}
@@ -341,6 +469,137 @@ export default function GameRoom({
         </section>
 
         <aside className="flex min-h-0 flex-col gap-2 overflow-hidden">
+          {!demo && (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className={`inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 font-display text-[11px] font-extrabold shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 ${
+                  settingsOpen
+                    ? "border-[#8a5a1e] bg-[#ffe9b8] text-[#7a5320]"
+                    : "border-[#8a5a1e] bg-[#fdf6e3] text-[#7a5320]"
+                }`}
+                title="Configuración de la partida"
+                aria-expanded={settingsOpen}
+                onClick={() => setSettingsOpen((open) => !open)}
+              >
+                <Settings size={13} /> Configuración
+              </button>
+              {paused && (
+                <span className="rounded-full border-2 border-[#7a5a3a] bg-[#3c2415] px-2 py-[3px] text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#ffd76a]">
+                  ⏸ En pausa
+                </span>
+              )}
+              {!paused && pauseRequest && (
+                <span className="rounded-full border-2 border-[#e3cfa5] bg-[#fffaf0] px-2 py-[3px] text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#b08a4a]">
+                  Votación en curso
+                </span>
+              )}
+            </div>
+          )}
+
+          {!demo && settingsOpen && (
+            <section
+              className="shrink-0 rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] p-2.5 shadow-[0_4px_0_rgba(74,44,18,0.25)]"
+              aria-label="Configuración"
+            >
+              <h2 className="font-display text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#a08a5e]">
+                Pausa de la partida
+              </h2>
+              {pauseRequest ? (
+                <>
+                  <p className="mt-1 text-[11px] font-semibold text-[#8a6a3a]">
+                    {pauseRequest.mode === "pause"
+                      ? "Votación para pausar: se necesita el voto de todos."
+                      : "Votación para reanudar: se necesita el voto de todos."}
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {room.players.map((player) => {
+                      const voted = pauseRequest.votes[player.id] === true;
+                      return (
+                        <li
+                          key={player.id}
+                          className={`rounded-full border-2 px-2 py-[2px] text-[10px] font-extrabold ${
+                            voted
+                              ? "border-[#8fae5a] bg-[#eef4dc] text-[#4a6b28]"
+                              : "border-[#e3cfa5] bg-[#fffaf0] text-[#b08a4a]"
+                          }`}
+                        >
+                          {voted ? "✓" : "…"} {player.name}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {pauseRequest.votes[room.selfPlayerId] !== true && (
+                      <>
+                        <button
+                          className={CG_BUTTON_ACCEPT}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onVotePause(true)}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          className={CG_BUTTON_REJECT}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onVotePause(false)}
+                        >
+                          Rechazar
+                        </button>
+                      </>
+                    )}
+                    {(pauseRequest.requestedBy === room.selfPlayerId ||
+                      room.hostPlayerId === room.selfPlayerId) && (
+                      <button
+                        className={CG_BUTTON_NEUTRAL}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void onCancelPauseRequest()}
+                      >
+                        Cancelar propuesta
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : paused ? (
+                <>
+                  <p className="mt-1 text-[11px] font-semibold text-[#8a6a3a]">
+                    La partida está pausada y el tiempo del turno quedó congelado
+                    {room.pauseRemainingMs !== null
+                      ? ` (quedaban ${formatDuration(room.pauseRemainingMs)})`
+                      : ""}
+                    . Se necesita el voto de todos para reanudar.
+                  </p>
+                  <button
+                    className={`${CG_BUTTON_ACCEPT} mt-2.5`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onRequestPause("resume")}
+                  >
+                    Proponer reanudación
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-[11px] font-semibold text-[#8a6a3a]">
+                    Se envía una votación a todos los jugadores. Si todos aceptan, la partida se
+                    pausa y el tiempo del turno se detiene.
+                  </p>
+                  <button
+                    className={`${CG_BUTTON_ACCEPT} mt-2.5`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onRequestPause("pause")}
+                  >
+                    Proponer pausa
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+
           <FeedPanel
             messages={messages}
             events={events}
@@ -348,6 +607,7 @@ export default function GameRoom({
             onSend={onSendMessage}
           />
           <section
+            id="bank-panel"
             className="shrink-0 rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-2.5 py-1.5 shadow-[0_4px_0_rgba(74,44,18,0.25)]"
             aria-label="Banco"
           >
@@ -393,7 +653,7 @@ export default function GameRoom({
             room={room}
             mode={mode}
             selectedCard={selectedCard}
-            busy={busy}
+            busy={busy || paused}
             onModeChange={setMode}
             onSelectedCard={selectDevelopmentCard}
             onAction={onAction}
@@ -402,7 +662,7 @@ export default function GameRoom({
         )}
       </footer>
 
-      {!demo && tradeComposer && (
+      {!demo && tradeComposer && !paused && (
         <TradeComposer
           game={game}
           busy={busy}
@@ -562,6 +822,28 @@ export default function GameRoom({
       <span className="sr-only" aria-live="polite">
         {robberTargetName ? `Territorio seleccionado ${robberTargetName}` : ""}
       </span>
+
+      {flyingCards.length > 0 && (
+        <div className="pointer-events-none fixed inset-0 z-[80]">
+          {flyingCards.map((card) => (
+            <img
+              key={card.id}
+              className="absolute h-9 w-auto animate-[card-fly_0.85s_ease-in_forwards] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
+              style={
+                {
+                  left: card.from.x,
+                  top: card.from.y,
+                  animationDelay: `${card.delay}ms`,
+                  "--fly-x": `${card.to.x - card.from.x}px`,
+                  "--fly-y": `${card.to.y - card.from.y}px`,
+                } as CSSProperties
+              }
+              src={RESOURCE_CARD_FILES[card.resource]}
+              alt=""
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -601,60 +883,62 @@ function PlayerPanel({
 
   return (
     <article
+      id={`player-card-${player.id}`}
       className={`group relative rounded-2xl border-2 px-2.5 py-2 shadow-[0_3px_0_rgba(74,44,18,0.25)] max-[940px]:min-w-[190px] ${tone} ${
         offline ? "opacity-70" : ""
-      }`}
+      } ${player.isCurrentPlayer ? "turn-glow" : ""}`}
       title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail})`}
     >
+      {player.isCurrentPlayer && (
+        <span
+          className="absolute -right-1 top-1/2 h-9 w-1.5 -translate-y-1/2 animate-pulse rounded-full bg-gradient-to-b from-[#e8b25a] to-[#c98a34] shadow-[0_0_10px_rgba(217,164,74,0.95)]"
+          title="Es su turno"
+        />
+      )}
       <div className="flex items-center gap-2">
         <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#8a5a1e] font-display text-xs font-extrabold text-white shadow-[0_2px_0_rgba(74,44,18,0.35)]"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-[#8a5a1e] font-display text-[13px] font-extrabold text-white shadow-[0_2px_0_rgba(74,44,18,0.35)]"
           style={{ backgroundColor: player.color }}
         >
           {player.name.slice(0, 2).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1.5">
-            <strong className="block truncate font-display text-[13px] font-extrabold text-[#4a2c12]">
+            <strong className="block truncate font-display text-[15px] font-extrabold text-[#4a2c12]">
               {isBot ? "🤖 " : ""}
               {player.name}
               {self ? " (vos)" : ""}
             </strong>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[11px] font-black text-[#7a5320]">
-              <img
-                className="h-3.5 w-auto"
-                src={DEV_CARD_FILES["victory-point"]}
-                alt="Puntos de victoria"
-                title="Puntos de victoria"
-              />
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[12px] font-black text-[#7a5320]">
+              <Crown size={13} />
               {points}
             </span>
           </div>
-          <div className="mt-1 flex items-center gap-2.5 text-[11px] font-bold text-[#7a5320]">
+          <div className="mt-1 flex items-center gap-2.5 text-[13px] font-bold text-[#7a5320]">
             <span className="inline-flex items-center gap-1" title="Cartas de recurso">
-              <img className="h-3.5 w-auto" src={BANK_FILE} alt="" />
+              <img className="h-5 w-auto" src={BANK_FILE} alt="" />
               {player.resourceCardCount}
             </span>
             <span className="inline-flex items-center gap-1" title="Cartas de desarrollo">
-              <img className="h-4 w-auto" src={DEV_CARD_BACK_FILE} alt="" />
+              <img className="h-5 w-auto" src={DEV_CARD_BACK_FILE} alt="" />
               {player.developmentCardCount}
             </span>
             <span className="inline-flex items-center gap-1" title="Caballeros jugados">
-              <img className="h-4 w-auto" src={DEV_CARD_FILES.knight} alt="" />
+              <img className="h-5 w-auto" src={DEV_CARD_FILES.knight} alt="" />
               {player.playedKnights}
             </span>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-[10px] font-semibold text-[#a08a5e]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-[11px] font-semibold text-[#a08a5e]">
             <span className="inline-flex items-center gap-1" title="Caminos construidos">
-              <img className="h-3.5 w-auto" src={pieceFile("road", player.color)} alt="" />
+              <img className="h-4 w-auto" src={pieceFile("road", player.color)} alt="" />
               {player.roadsBuilt}
             </span>
             <span className="inline-flex items-center gap-1" title="Poblados construidos">
-              <img className="h-3.5 w-auto" src={pieceFile("settlement", player.color)} alt="" />
+              <img className="h-4 w-auto" src={pieceFile("settlement", player.color)} alt="" />
               {player.settlementsBuilt}
             </span>
             <span className="inline-flex items-center gap-1" title="Ciudades construidas">
-              <img className="h-3.5 w-auto" src={pieceFile("city", player.color)} alt="" />
+              <img className="h-4 w-auto" src={pieceFile("city", player.color)} alt="" />
               {player.citiesBuilt}
             </span>
             {offline && <span className="font-bold text-[#a4462f]">Desconectado</span>}
@@ -686,6 +970,33 @@ function PlayerPanel({
       </div>
     </article>
   );
+}
+
+function computeProduction(game: PlayerGameView, roll: number): Record<string, Resource[]> {
+  const produced: Record<string, Resource[]> = {};
+  for (const hex of game.board.hexes) {
+    if (hex.number !== roll || hex.id === game.robberHexId) continue;
+    const terrain = hex.terrain;
+    if (terrain === "desert") continue;
+    for (const vertex of game.board.vertices) {
+      if (!vertex.hexIds.includes(hex.id)) continue;
+      const owner = game.players.find(
+        (player) =>
+          player.settlementVertexIds.includes(vertex.id) ||
+          player.cityVertexIds.includes(vertex.id),
+      );
+      if (!owner) continue;
+      const amount = owner.cityVertexIds.includes(vertex.id) ? 2 : 1;
+      const list = produced[owner.id] ?? (produced[owner.id] = []);
+      for (let index = 0; index < amount; index += 1) list.push(terrain);
+    }
+  }
+  return produced;
+}
+
+function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
 function formatDuration(ms: number): string {

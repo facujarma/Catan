@@ -92,8 +92,9 @@ export default function RoomLobby({
             <p className={EYEBROW}>Tiempo por turno</p>
             <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#a08a5e]">
               El dado se tira solo a los 5 s. El ladrón y el robo tienen 20 s cada uno; comerciar,
-              15 s para elegir socio y 5 s para responder. El resto del turno usa este límite y se
-              pausa mientras resolvés un ladrón o un comercio.
+              15 s para elegir socio y 5 s para responder. La colocación inicial tiene 2 min por
+              poblado y 20 s por camino. El resto del turno usa este límite y se pausa mientras
+              resolvés un ladrón o un comercio.
             </p>
           </div>
           {me?.isHost ? (

@@ -37,6 +37,20 @@ export default defineSchema({
       ),
     ),
     botTurnKey: v.optional(v.string()),
+    pausedAt: v.optional(v.union(v.number(), v.null())),
+    pauseRemainingMs: v.optional(v.union(v.number(), v.null())),
+    pauseTradeRemainingMs: v.optional(v.union(v.number(), v.null())),
+    pauseRequest: v.optional(
+      v.union(
+        v.object({
+          mode: v.union(v.literal("pause"), v.literal("resume")),
+          requestedBy: v.string(),
+          votes: v.record(v.string(), v.boolean()),
+          createdAt: v.number(),
+        }),
+        v.null(),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
