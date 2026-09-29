@@ -100,6 +100,7 @@ function decorateGame(initial: GameState): GameState {
 
   for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
     state.phase = "main";
+    state.hasRolled = true;
     state.currentPlayerIndex = playerIndex;
     state.turnNumber = 4 + playerIndex;
     state.playedDevelopmentCardThisTurn = false;

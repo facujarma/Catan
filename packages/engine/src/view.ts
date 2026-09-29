@@ -31,6 +31,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
     bank: { ...state.bank },
     developmentDeckCount: state.developmentDeck.length,
     phase: state.phase,
+    hasRolled: state.hasRolled,
     turnNumber: state.turnNumber,
     playedDevelopmentCardThisTurn: state.playedDevelopmentCardThisTurn,
     currentPlayerId: getCurrentPlayerId(state),

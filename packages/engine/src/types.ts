@@ -122,6 +122,7 @@ export interface GameState {
   setupIndex: number;
   setupRoadFromVertexId: string | null;
   turnNumber: number;
+  hasRolled: boolean;
   robberHexId: string;
   pendingDiscards: Record<string, number>;
   pendingRobberVictim: PendingRobberVictim | null;
@@ -230,6 +231,7 @@ export interface PlayerGameView {
   bank: ResourceBundle;
   developmentDeckCount: number;
   phase: GamePhase;
+  hasRolled: boolean;
   turnNumber: number;
   playedDevelopmentCardThisTurn: boolean;
   currentPlayerId: string;

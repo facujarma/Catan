@@ -30,6 +30,38 @@ describe("cartas de desarrollo", () => {
     ).toThrow(/comprada este turno/i);
   });
 
+  it("permite jugar un caballero antes de tirar y vuelve a la tirada", () => {
+    const state = mainState();
+    state.phase = "awaiting-roll";
+    state.hasRolled = false;
+    state.playedDevelopmentCardThisTurn = false;
+    const targetHex = state.board.hexes.find((hex) => hex.id !== state.robberHexId)!;
+    state.players[0]!.developmentCards = [
+      { id: "knight-early", type: "knight", boughtOnTurn: 2 },
+    ];
+
+    const played = applyAction(state, {
+      type: "play-knight",
+      playerId: "p1",
+      cardId: "knight-early",
+    });
+    expect(played.phase).toBe("robber");
+    expect(played.playedDevelopmentCardThisTurn).toBe(true);
+
+    const moved = applyAction(played, {
+      type: "move-robber",
+      playerId: "p1",
+      hexId: targetHex.id,
+      victimId: null,
+    });
+    expect(moved.phase).toBe("awaiting-roll");
+    expect(moved.hasRolled).toBe(false);
+
+    const rolled = applyAction(moved, { type: "roll", playerId: "p1" });
+    expect(rolled.phase).not.toBe("awaiting-roll");
+    expect(rolled.hasRolled).toBe(true);
+  });
+
   it("monopolio toma de todos los rivales solo el recurso elegido", () => {
     const state = mainState();
     state.players[0]!.developmentCards = [

@@ -135,6 +135,7 @@ export function createGame(options: CreateGameOptions): GameState {
     setupIndex: 0,
     setupRoadFromVertexId: null,
     turnNumber: 0,
+    hasRolled: false,
     robberHexId: desert.id,
     pendingDiscards: {},
     pendingRobberVictim: null,
@@ -546,6 +547,12 @@ function requireMainTurn(state: GameState, playerId: string): PlayerState {
   return getPlayer(state, playerId);
 }
 
+function requirePlayableTurn(state: GameState, playerId: string): PlayerState {
+  requirePhase(state, "awaiting-roll", "main");
+  requireCurrentPlayer(state, playerId);
+  return getPlayer(state, playerId);
+}
+
 function requireDevelopmentCard(
   state: GameState,
   player: PlayerState,
@@ -766,6 +773,7 @@ function rollDice(state: GameState, playerId: string, random: SeededRandom): voi
   const dice: [number, number] = [random.nextInt(6) + 1, random.nextInt(6) + 1];
   const total = dice[0] + dice[1];
   state.lastRoll = { dice, total };
+  state.hasRolled = true;
 
   if (total !== 7) {
     produceResources(state, total);
@@ -841,7 +849,7 @@ function buyDevelopmentCard(state: GameState, playerId: string): void {
 }
 
 function playKnight(state: GameState, playerId: string, cardId: string): void {
-  const player = requireMainTurn(state, playerId);
+  const player = requirePlayableTurn(state, playerId);
   const card = requireDevelopmentCard(state, player, cardId, "knight");
   discardDevelopmentCard(player, card.id);
   player.playedKnights += 1;
@@ -858,7 +866,7 @@ function playMonopoly(
   cardId: string,
   resource: Resource,
 ): void {
-  const player = requireMainTurn(state, playerId);
+  const player = requirePlayableTurn(state, playerId);
   const card = requireDevelopmentCard(state, player, cardId, "monopoly");
   assertResourceType(resource);
   for (const otherPlayer of state.players) {
@@ -876,7 +884,7 @@ function playYearOfPlenty(
   cardId: string,
   resources: Resource[],
 ): void {
-  const player = requireMainTurn(state, playerId);
+  const player = requirePlayableTurn(state, playerId);
   const card = requireDevelopmentCard(state, player, cardId, "year-of-plenty");
   const cardsAvailable = totalResources(state.bank);
   const expectedCards = Math.min(2, cardsAvailable);
@@ -908,7 +916,7 @@ function playRoadBuilding(
   cardId: string,
   edgeIds: string[],
 ): void {
-  const player = requireMainTurn(state, playerId);
+  const player = requirePlayableTurn(state, playerId);
   const card = requireDevelopmentCard(state, player, cardId, "road-building");
   if (
     !Array.isArray(edgeIds) ||
@@ -962,12 +970,16 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       requirePhase(next, "robber");
       requireCurrentPlayer(next, action.playerId);
       moveRobber(next, action.playerId, action.hexId, action.victimId, random);
-      next.phase = next.pendingRobberVictim ? "robber-victim" : "main";
+      next.phase = next.pendingRobberVictim
+        ? "robber-victim"
+        : next.hasRolled
+          ? "main"
+          : "awaiting-roll";
       break;
 
     case "choose-robber-victim":
       chooseRobberVictim(next, action.playerId, action.victimId, random);
-      next.phase = "main";
+      next.phase = next.hasRolled ? "main" : "awaiting-roll";
       break;
 
     case "build-road":
@@ -1070,6 +1082,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       next.currentPlayerIndex = (next.currentPlayerIndex + 1) % next.players.length;
       next.turnNumber += 1;
       next.phase = "awaiting-roll";
+      next.hasRolled = false;
       next.playedDevelopmentCardThisTurn = false;
       next.activeTrade = null;
       next.pendingRobberVictim = null;

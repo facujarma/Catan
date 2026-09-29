@@ -2,21 +2,11 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
-import {
-  Castle,
-  Dices,
-  Handshake,
-  Home,
-  Hourglass,
-  Layers,
-  Lock,
-  Route,
-  Sparkles,
-} from "lucide-react";
+import { Dices, Eye, EyeOff, Handshake, Hourglass, Layers, Lock } from "lucide-react";
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
 import { bundleTotal, canAfford, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
-import { DEV_CARD_FILES, RESOURCE_CARD_FILES } from "../assets";
+import { DEV_CARD_BACK_FILE, DEV_CARD_FILES, pieceFile, RESOURCE_CARD_FILES } from "../assets";
 import { CG_BUTTON_ACCEPT, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 
 interface GameActionsProps {
@@ -59,31 +49,36 @@ const DIE_PIPS: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
-function DieFace({ value }: { value: number }) {
+function DieFace({ value, big = false }: { value: number; big?: boolean }) {
   const pips = DIE_PIPS[value] ?? [];
   return (
     <span
-      className="grid h-10 w-10 grid-cols-3 grid-rows-3 place-items-center rounded-[9px] border-2 border-[#8a5a1e] bg-gradient-to-b from-white to-[#f3e7cf] p-[3px] shadow-[0_2px_0_#8a5a1e]"
+      className={`grid ${big ? "h-12 w-12" : "h-10 w-10"} grid-cols-3 grid-rows-3 place-items-center rounded-[9px] border-2 border-[#8a5a1e] bg-gradient-to-b from-white to-[#f3e7cf] p-[3px] shadow-[0_2px_0_#8a5a1e]`}
       title={`Dado: ${value}`}
       aria-label={`Dado: ${value}`}
     >
       {Array.from({ length: 9 }, (_, index) => (
         <span
           key={index}
-          className={`h-[6px] w-[6px] rounded-full bg-[#4a2c12] ${pips.includes(index) ? "" : "opacity-0"}`}
+          className={`${big ? "h-[7px] w-[7px]" : "h-[6px] w-[6px]"} rounded-full bg-[#4a2c12] ${pips.includes(index) ? "" : "opacity-0"}`}
         />
       ))}
     </span>
   );
 }
 
-function ResourceStack({ resource, count }: { resource: Resource; count: number }) {
+function ResourceStack({
+  resource,
+  count,
+  onClick,
+}: {
+  resource: Resource;
+  count: number;
+  onClick?: (() => void) | undefined;
+}) {
   const individual = count < 3 ? count : 1;
-  return (
-    <div
-      className="flex items-end gap-0.5"
-      title={`${count} ${RESOURCE_NAMES[resource].toLowerCase()}`}
-    >
+  const content = (
+    <span className="flex items-end gap-0.5">
       {Array.from({ length: individual }, (_, index) => (
         <span key={index} className="relative">
           <img
@@ -99,7 +94,29 @@ function ResourceStack({ resource, count }: { resource: Resource; count: number 
           )}
         </span>
       ))}
-    </div>
+    </span>
+  );
+
+  if (!onClick) {
+    return (
+      <span
+        className="flex items-end gap-0.5"
+        title={`${count} ${RESOURCE_NAMES[resource].toLowerCase()}`}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="cursor-pointer rounded-lg transition enabled:hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a9793a]"
+      title={`${count} ${RESOURCE_NAMES[resource].toLowerCase()} · tocar para comerciar`}
+      onClick={onClick}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -167,6 +184,13 @@ export default function GameActions({
   const isMainTurn = game.phase === "main" && isMyTurn;
   const [discard, setDiscard] = useState<ResourceBundle>(emptyBundle);
   const [discardSubmitted, setDiscardSubmitted] = useState(false);
+  const [handHidden, setHandHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem("catan:hand-hidden") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const pendingCount = game.self.pendingDiscardCount;
   const discardTotal = bundleTotal(discard);
@@ -174,6 +198,21 @@ export default function GameActions({
   const currentPlayerIsBot = room.players.some(
     (player) => player.id === game.currentPlayerId && player.isBot,
   );
+  const isPlayableTurn = isMyTurn && (game.phase === "main" || game.phase === "awaiting-roll");
+  const readyToRoll = isMyTurn && game.phase === "awaiting-roll";
+  const selfColor = selfPlayer?.color ?? "#e2b83f";
+
+  const toggleHandHidden = () => {
+    setHandHidden((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem("catan:hand-hidden", next ? "1" : "0");
+      } catch {
+        // sin persistencia disponible
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     setDiscard(emptyBundle());
@@ -197,7 +236,7 @@ export default function GameActions({
   };
 
   const isCardPlayable = (card: HeldDevelopmentCard) =>
-    isMainTurn &&
+    isPlayableTurn &&
     card.type !== "victory-point" &&
     card.boughtOnTurn < game.turnNumber &&
     !game.playedDevelopmentCardThisTurn;
@@ -217,59 +256,88 @@ export default function GameActions({
           <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#a08a5e]">
             <Layers size={13} />
             Tu mano
+            <button
+              type="button"
+              className="ml-auto inline-flex items-center gap-1 rounded-lg border-2 border-[#c9a86a] bg-[#fdf6e3] px-1.5 py-0.5 text-[9px] font-extrabold text-[#7a5320] transition enabled:hover:brightness-105"
+              title={handHidden ? "Mostrar mis cartas" : "Ocultar mis cartas"}
+              aria-pressed={handHidden}
+              onClick={toggleHandHidden}
+            >
+              {handHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+              {handHidden ? "Mostrar" : "Ocultar"}
+            </button>
           </div>
-          <div className="flex flex-wrap items-end gap-1.5">
-            {ownedResources.length === 0 ? (
-              <span className="text-[11px] font-semibold text-[#b08a4a]">Sin cartas</span>
-            ) : (
-              ownedResources.map((resource) => (
-                <ResourceStack
-                  key={resource}
-                  resource={resource}
-                  count={game.self.resources[resource]}
-                />
-              ))
-            )}
-          </div>
-          {game.self.developmentCards.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1">
-              {game.self.developmentCards.map((card) => {
-                const playable = isCardPlayable(card);
-                const selected = selectedCard?.id === card.id;
-                return (
-                  <span
-                    key={card.id}
-                    className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
-                      selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
-                    }`}
-                  >
-                    <img
-                      className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
-                      src={DEV_CARD_FILES[card.type]}
-                      alt={CARD_NAMES[card.type]}
-                      title={CARD_NAMES[card.type]}
-                      draggable={false}
-                    />
-                    {card.type === "victory-point" ? (
-                      <span className="pr-1 text-[9px] font-bold text-[#8a6a3a]" title="Solo vos podés verla; cuenta +1 punto">
-                        Secreta · +1 PV
-                      </span>
-                    ) : card.boughtOnTurn >= game.turnNumber ? (
-                      <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
-                    ) : (
-                      <button
-                        className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
-                        type="button"
-                        disabled={!playable || busy}
-                        onClick={() => onSelectedCard(card)}
-                      >
-                        Jugar
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
+          {handHidden ? (
+            <div className="flex items-center gap-2">
+              <img
+                className="h-11 w-auto drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)]"
+                src={DEV_CARD_BACK_FILE}
+                alt="Cartas ocultas"
+              />
+              <span className="text-[11px] font-semibold text-[#b08a4a]">
+                Cartas ocultas · usá el ojo para mostrarlas
+              </span>
             </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-end gap-1.5">
+                {ownedResources.length === 0 ? (
+                  <span className="text-[11px] font-semibold text-[#b08a4a]">Sin cartas</span>
+                ) : (
+                  ownedResources.map((resource) => (
+                    <ResourceStack
+                      key={resource}
+                      resource={resource}
+                      count={game.self.resources[resource]}
+                      onClick={isMainTurn ? onOpenTrade : undefined}
+                    />
+                  ))
+                )}
+              </div>
+              {game.self.developmentCards.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {game.self.developmentCards.map((card) => {
+                    const playable = isCardPlayable(card);
+                    const selected = selectedCard?.id === card.id;
+                    return (
+                      <span
+                        key={card.id}
+                        className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
+                          selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
+                        }`}
+                      >
+                        <img
+                          className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                          src={DEV_CARD_FILES[card.type]}
+                          alt={CARD_NAMES[card.type]}
+                          title={CARD_NAMES[card.type]}
+                          draggable={false}
+                        />
+                        {card.type === "victory-point" ? (
+                          <span
+                            className="pr-1 text-[9px] font-bold text-[#8a6a3a]"
+                            title="Solo vos podés verla; cuenta +1 punto"
+                          >
+                            Secreta · +1 PV
+                          </span>
+                        ) : card.boughtOnTurn >= game.turnNumber ? (
+                          <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
+                        ) : (
+                          <button
+                            className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            disabled={!playable || busy}
+                            onClick={() => onSelectedCard(card)}
+                          >
+                            Jugar
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -287,12 +355,20 @@ export default function GameActions({
               : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </div>
           {game.lastRoll ? (
-            <div className="flex items-center gap-1.5">
-              <DieFace value={game.lastRoll.dice[0]} />
-              <DieFace value={game.lastRoll.dice[1]} />
+            <div
+              className={`flex items-center gap-1.5 ${
+                readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
+              }`}
+            >
+              <DieFace value={game.lastRoll.dice[0]} big={readyToRoll} />
+              <DieFace value={game.lastRoll.dice[1]} big={readyToRoll} />
             </div>
           ) : (
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-[#b08a4a]">
+            <span
+              className={`flex items-center gap-1 text-[11px] font-semibold text-[#b08a4a] ${
+                readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
+              }`}
+            >
               <Dices size={13} /> Sin tirar
             </span>
           )}
@@ -325,7 +401,7 @@ export default function GameActions({
             onClick={onOpenTrade}
           />
           <ActionButton
-            icon={<Sparkles size={17} />}
+            icon={<img className="h-6 w-auto" src={DEV_CARD_BACK_FILE} alt="" draggable={false} />}
             label="Carta"
             title={
               game.developmentDeckCount === 0
@@ -336,7 +412,14 @@ export default function GameActions({
             onClick={() => void onAction({ type: "buy-development-card" })}
           />
           <ActionButton
-            icon={<Route size={17} />}
+            icon={
+              <img
+                className="h-6 w-auto"
+                src={pieceFile("road", selfColor)}
+                alt=""
+                draggable={false}
+              />
+            }
             label="Camino"
             title="Construir camino (madera + ladrillo)"
             active={mode === "road"}
@@ -345,7 +428,14 @@ export default function GameActions({
             onClick={() => toggleMode("road")}
           />
           <ActionButton
-            icon={<Home size={17} />}
+            icon={
+              <img
+                className="h-6 w-auto"
+                src={pieceFile("settlement", selfColor)}
+                alt=""
+                draggable={false}
+              />
+            }
             label="Poblado"
             title="Construir poblado (madera + ladrillo + oveja + trigo)"
             active={mode === "settlement"}
@@ -354,7 +444,14 @@ export default function GameActions({
             onClick={() => toggleMode("settlement")}
           />
           <ActionButton
-            icon={<Castle size={17} />}
+            icon={
+              <img
+                className="h-6 w-auto"
+                src={pieceFile("city", selfColor)}
+                alt=""
+                draggable={false}
+              />
+            }
             label="Ciudad"
             title="Mejorar a ciudad (2 trigo + 3 mineral)"
             active={mode === "city"}

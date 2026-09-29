@@ -14,6 +14,7 @@ export function mainState(seed: number | string = 123, count = 4): GameState {
   return {
     ...initial,
     phase: "main",
+    hasRolled: true,
     setupIndex: initial.players.length * 2,
     turnNumber: 3,
     players: initial.players.map((player) => ({

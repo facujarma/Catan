@@ -4,20 +4,15 @@ import type { HeldDevelopmentCard, PlayerPublicView, Resource } from "@catan/eng
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
-import {
-  Castle,
-  Crown,
-  Home,
-  Landmark,
-  Layers,
-  LogOut,
-  Route,
-  ScrollText,
-  Swords,
-  UserPlus,
-} from "lucide-react";
+import { Landmark, LogOut, UserPlus } from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
-import { RESOURCE_CARD_FILES } from "../assets";
+import {
+  BANK_FILE,
+  DEV_CARD_BACK_FILE,
+  DEV_CARD_FILES,
+  pieceFile,
+  RESOURCE_CARD_FILES,
+} from "../assets";
 import {
   CG_BUTTON_ACCEPT,
   CG_BUTTON_NEUTRAL,
@@ -626,34 +621,40 @@ function PlayerPanel({
               {self ? " (vos)" : ""}
             </strong>
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[11px] font-black text-[#7a5320]">
-              <Crown size={11} /> {points}
+              <img
+                className="h-3.5 w-auto"
+                src={DEV_CARD_FILES["victory-point"]}
+                alt="Puntos de victoria"
+                title="Puntos de victoria"
+              />
+              {points}
             </span>
           </div>
           <div className="mt-1 flex items-center gap-2.5 text-[11px] font-bold text-[#7a5320]">
             <span className="inline-flex items-center gap-1" title="Cartas de recurso">
-              <Layers size={13} />
+              <img className="h-3.5 w-auto" src={BANK_FILE} alt="" />
               {player.resourceCardCount}
             </span>
             <span className="inline-flex items-center gap-1" title="Cartas de desarrollo">
-              <ScrollText size={13} />
+              <img className="h-4 w-auto" src={DEV_CARD_BACK_FILE} alt="" />
               {player.developmentCardCount}
             </span>
             <span className="inline-flex items-center gap-1" title="Caballeros jugados">
-              <Swords size={13} />
+              <img className="h-4 w-auto" src={DEV_CARD_FILES.knight} alt="" />
               {player.playedKnights}
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-[10px] font-semibold text-[#a08a5e]">
             <span className="inline-flex items-center gap-1" title="Caminos construidos">
-              <Route size={12} />
+              <img className="h-3.5 w-auto" src={pieceFile("road", player.color)} alt="" />
               {player.roadsBuilt}
             </span>
             <span className="inline-flex items-center gap-1" title="Poblados construidos">
-              <Home size={12} />
+              <img className="h-3.5 w-auto" src={pieceFile("settlement", player.color)} alt="" />
               {player.settlementsBuilt}
             </span>
             <span className="inline-flex items-center gap-1" title="Ciudades construidas">
-              <Castle size={12} />
+              <img className="h-3.5 w-auto" src={pieceFile("city", player.color)} alt="" />
               {player.citiesBuilt}
             </span>
             {offline && <span className="font-bold text-[#a4462f]">Desconectado</span>}
@@ -664,12 +665,14 @@ function PlayerPanel({
         <div className="mt-1 flex flex-wrap gap-1">
           {longestRoad && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]">
-              <Route size={10} /> Camino más largo
+              <img className="h-3 w-auto" src={pieceFile("road", player.color)} alt="" /> Camino más
+              largo
             </span>
           )}
           {largestArmy && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#f6dcd6] px-1.5 py-0.5 text-[9px] font-extrabold text-[#8a3a22]">
-              <Swords size={10} /> Ejército más grande
+              <img className="h-3.5 w-auto" src={DEV_CARD_FILES.knight} alt="" /> Ejército más
+              grande
             </span>
           )}
         </div>
