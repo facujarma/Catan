@@ -1,3 +1,9 @@
+export const TABLE_BACKGROUND =
+  "[background-image:repeating-linear-gradient(90deg,#573924_0px,#573924_80px,#4e321f_80px,#4e321f_160px)]";
+
+export const WOOD_BACKGROUND =
+  "[background-image:repeating-linear-gradient(90deg,#573924_0px,#573924_80px,#4e321f_80px,#4e321f_160px),radial-gradient(ellipse_at_50%_-10%,rgba(255,214,140,0.16),transparent_55%)]";
+
 export const CARD =
   "rounded-3xl border-2 border-[#c9a86a] bg-[#f7ecd4] shadow-[0_8px_0_rgba(74,44,18,0.35),0_16px_30px_rgba(0,0,0,0.22)]";
 

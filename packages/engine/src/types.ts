@@ -88,9 +88,15 @@ export type GamePhase =
   | "awaiting-roll"
   | "discard"
   | "robber"
+  | "robber-victim"
   | "main"
   | "trade"
   | "finished";
+
+export interface PendingRobberVictim {
+  hexId: string;
+  victimIds: string[];
+}
 
 export interface TradeOffer {
   id: string;
@@ -118,6 +124,7 @@ export interface GameState {
   turnNumber: number;
   robberHexId: string;
   pendingDiscards: Record<string, number>;
+  pendingRobberVictim: PendingRobberVictim | null;
   activeTrade: TradeOffer | null;
   longestRoadHolderId: string | null;
   largestArmyHolderId: string | null;
@@ -144,17 +151,12 @@ export type GameAction =
       hexId: string;
       victimId: string | null;
     }
+  | { type: "choose-robber-victim"; playerId: string; victimId: string }
   | { type: "build-road"; playerId: string; edgeId: string }
   | { type: "build-settlement"; playerId: string; vertexId: string }
   | { type: "build-city"; playerId: string; vertexId: string }
   | { type: "buy-development-card"; playerId: string }
-  | {
-      type: "play-knight";
-      playerId: string;
-      cardId: string;
-      hexId: string;
-      victimId: string | null;
-    }
+  | { type: "play-knight"; playerId: string; cardId: string }
   | {
       type: "play-monopoly";
       playerId: string;
@@ -226,6 +228,7 @@ export interface PlayerPrivateView {
 export interface PlayerGameView {
   board: Board;
   bank: ResourceBundle;
+  developmentDeckCount: number;
   phase: GamePhase;
   turnNumber: number;
   playedDevelopmentCardThisTurn: boolean;
@@ -233,6 +236,7 @@ export interface PlayerGameView {
   players: PlayerPublicView[];
   self: PlayerPrivateView;
   robberHexId: string;
+  pendingRobberVictim: PendingRobberVictim | null;
   lastRoll: DiceRoll | null;
   activeTrade: TradeOffer | null;
   longestRoadHolderId: string | null;

@@ -37,6 +37,7 @@ export type {
   GameState,
   HeldDevelopmentCard,
   Hex,
+  PendingRobberVictim,
   PlayerConfig,
   PlayerGameView,
   PlayerPublicView,

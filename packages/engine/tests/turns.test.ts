@@ -126,6 +126,37 @@ describe("dados, producción y ladrón", () => {
     ).toThrow(/no podés descartar/i);
   });
 
+  it("pide elegir víctima cuando hay más de un rival con cartas junto al ladrón", () => {
+    const state = mainState(321);
+    const hex = state.board.hexes.find((candidate) => candidate.id !== state.robberHexId)!;
+    const vertices = state.board.vertices.filter((vertex) => vertex.hexIds.includes(hex.id));
+    state.phase = "robber";
+    state.players[1]!.settlements = [vertices[0]!.id];
+    state.players[1]!.resources = bundle({ brick: 2 });
+    state.players[2]!.settlements = [vertices[1]!.id];
+    state.players[2]!.resources = bundle({ ore: 1 });
+
+    const moved = applyAction(state, {
+      type: "move-robber",
+      playerId: "p1",
+      hexId: hex.id,
+      victimId: null,
+    });
+    expect(moved.phase).toBe("robber-victim");
+    expect(moved.pendingRobberVictim?.hexId).toBe(hex.id);
+    expect([...moved.pendingRobberVictim!.victimIds].sort()).toEqual(["p2", "p3"]);
+
+    const stolen = applyAction(moved, {
+      type: "choose-robber-victim",
+      playerId: "p1",
+      victimId: "p3",
+    });
+    expect(stolen.phase).toBe("main");
+    expect(stolen.pendingRobberVictim).toBeNull();
+    expect(totalResources(stolen.players[2]!.resources)).toBe(0);
+    expect(totalResources(stolen.players[0]!.resources)).toBe(1);
+  });
+
   it("informa las víctimas posibles del ladrón excluyendo al jugador activo y a quien no tiene cartas", () => {
     const state = mainState(321);
     const hex = state.board.hexes.find((candidate) => candidate.id !== state.robberHexId)!;

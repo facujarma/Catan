@@ -292,9 +292,11 @@ export default function BoardSvg({
     if (!self || selectedRoadIds.includes(edgeId) || self.roadIds.length + selectedRoadIds.length >= 15) {
       return false;
     }
-    if (legal.freeRoadIds.includes(edgeId)) return true;
     const edge = edgeById.get(edgeId);
     if (!edge) return false;
+    const occupied = game.players.some((player) => player.roadIds.includes(edgeId));
+    if (occupied) return false;
+    if (legal.freeRoadIds.includes(edgeId)) return true;
     const ownAndSelectedRoads = new Set([...self.roadIds, ...selectedRoadIds]);
 
     return edge.vertexIds.some((vertexId) => {

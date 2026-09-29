@@ -155,7 +155,7 @@ describe("bots", () => {
     expect(events.some((event) => event.message.includes("Orden de turnos"))).toBe(true);
   });
 
-  test("los bots completan la colocación inicial y juegan su turno tras cinco segundos", async () => {
+  test("los bots completan la colocación inicial y juegan su turno tras unos segundos", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
     await startRoomWithBots(t, { bots: 2, limit: 60 });
@@ -188,7 +188,7 @@ describe("bots", () => {
     room = await snapshot(t);
     const stat = room.turnStats[bot.id];
     expect(stat?.turns).toBe(1);
-    expect(stat?.lastTurnMs).toBeGreaterThanOrEqual(5_000);
+    expect(stat?.lastTurnMs).toBeGreaterThanOrEqual(4_000);
     expect(room.game?.currentPlayerId).not.toBe(bot.id);
   });
 
@@ -213,6 +213,75 @@ describe("bots", () => {
     expect(afterTimeout?.roadsBuilt).toBe(1);
     expect(room.game?.currentPlayerId).not.toBe(HOST.playerId);
     expect(room.turnDeadlineAt).not.toBeNull();
+  });
+
+  test("el dado se tira solo cuando se agota la ventana de cinco segundos", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await startRoomWithBots(t, { bots: 2, limit: 60 });
+
+    await placeHostSetup(t);
+    await advanceBotActions(t, 4);
+    await placeHostSetup(t);
+
+    let room = await snapshot(t);
+    expect(room.game?.phase).toBe("awaiting-roll");
+    const remaining = (room.turnDeadlineAt ?? 0) - Date.now();
+    expect(remaining).toBeLessThanOrEqual(5_000);
+    expect(remaining).toBeGreaterThan(4_000);
+
+    vi.advanceTimersByTime(5_200);
+    await t.finishInProgressScheduledFunctions();
+
+    room = await snapshot(t);
+    expect(room.game?.lastRoll).not.toBeNull();
+    expect(room.game?.phase).not.toBe("awaiting-roll");
+  });
+
+  test("las respuestas del comercio se auto-rechazan a los cinco segundos", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await startRoomWithBots(t, { bots: 2, limit: 60 });
+
+    await placeHostSetup(t);
+    await advanceBotActions(t, 4);
+    await placeHostSetup(t);
+
+    await t.run(async (ctx) => {
+      const room = await ctx.db.query("rooms").first();
+      const state = room!.gameState;
+      state.phase = "main";
+      state.players[0].resources = { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+      state.players[1].resources = { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 };
+      state.players[2].resources = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+      await ctx.db.patch(room!._id, { gameState: state });
+    });
+
+    await act(t, {
+      type: "make-offer",
+      give: { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      want: { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+    });
+
+    let room = await snapshot(t);
+    expect(room.game?.phase).toBe("trade");
+    expect(room.tradeRespondDeadlineAt).not.toBeNull();
+
+    vi.advanceTimersByTime(4_000);
+    await t.finishInProgressScheduledFunctions();
+    room = await snapshot(t);
+    expect(room.game?.activeTrade?.rejectedBy).toEqual([]);
+
+    vi.advanceTimersByTime(1_500);
+    await t.finishInProgressScheduledFunctions();
+    room = await snapshot(t);
+    expect(room.game?.activeTrade?.rejectedBy).toHaveLength(2);
+
+    vi.advanceTimersByTime(11_000);
+    await t.finishInProgressScheduledFunctions();
+    room = await snapshot(t);
+    expect(room.game?.activeTrade).toBeNull();
+    expect(room.game?.phase).toBe("main");
   });
 
   test("solo el anfitrión configura los bots y el límite de tiempo", async () => {

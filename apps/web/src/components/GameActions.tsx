@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
 import {
@@ -8,7 +8,6 @@ import {
   Handshake,
   Home,
   Hourglass,
-  Landmark,
   Layers,
   Lock,
   Route,
@@ -16,9 +15,9 @@ import {
 } from "lucide-react";
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
-import { bundleTotal, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
-import { DEV_CARD_FILES, RESOURCE_CARD_FILES, RESOURCE_PORT_FILES } from "../assets";
-import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
+import { bundleTotal, canAfford, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
+import { DEV_CARD_FILES, RESOURCE_CARD_FILES } from "../assets";
+import { CG_BUTTON_ACCEPT, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
 
 interface GameActionsProps {
   room: RoomSnapshot;
@@ -45,10 +44,38 @@ const PHASE_LABEL: Record<string, string> = {
   "awaiting-roll": "Tirá los dados",
   discard: "Descartá por el siete",
   robber: "Movés al ladrón",
+  "robber-victim": "Elegís a quién robar",
   main: "Acciones",
   trade: "Comercio en curso",
   finished: "Partida terminada",
 };
+
+const DIE_PIPS: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+};
+
+function DieFace({ value }: { value: number }) {
+  const pips = DIE_PIPS[value] ?? [];
+  return (
+    <span
+      className="grid h-10 w-10 grid-cols-3 grid-rows-3 place-items-center rounded-[9px] border-2 border-[#8a5a1e] bg-gradient-to-b from-white to-[#f3e7cf] p-[3px] shadow-[0_2px_0_#8a5a1e]"
+      title={`Dado: ${value}`}
+      aria-label={`Dado: ${value}`}
+    >
+      {Array.from({ length: 9 }, (_, index) => (
+        <span
+          key={index}
+          className={`h-[6px] w-[6px] rounded-full bg-[#4a2c12] ${pips.includes(index) ? "" : "opacity-0"}`}
+        />
+      ))}
+    </span>
+  );
+}
 
 function ResourceStack({ resource, count }: { resource: Resource; count: number }) {
   const individual = count < 3 ? count : 1;
@@ -140,23 +167,18 @@ export default function GameActions({
   const isMainTurn = game.phase === "main" && isMyTurn;
   const [discard, setDiscard] = useState<ResourceBundle>(emptyBundle);
   const [discardSubmitted, setDiscardSubmitted] = useState(false);
-  const [maritimeOpen, setMaritimeOpen] = useState(false);
-  const [giveResource, setGiveResource] = useState<Resource>("wood");
-  const [wantResource, setWantResource] = useState<Resource>("brick");
-  const [giveAmount, setGiveAmount] = useState("1");
 
   const pendingCount = game.self.pendingDiscardCount;
   const discardTotal = bundleTotal(discard);
   const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
+  const currentPlayerIsBot = room.players.some(
+    (player) => player.id === game.currentPlayerId && player.isBot,
+  );
 
   useEffect(() => {
     setDiscard(emptyBundle());
     setDiscardSubmitted(false);
   }, [pendingCount]);
-
-  useEffect(() => {
-    if (game.phase !== "main") setMaritimeOpen(false);
-  }, [game.phase]);
 
   const toggleMode = (next: BoardMode) => {
     onSelectedCard(null);
@@ -174,19 +196,6 @@ export default function GameActions({
     void onAction({ type: "discard", resources: discard });
   };
 
-  const submitMaritimeTrade = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const amount = Number(giveAmount);
-    if (!Number.isInteger(amount) || amount <= 0 || giveResource === wantResource) return;
-    void onAction({
-      type: "maritime-trade",
-      giveResource,
-      giveAmount: amount,
-      receiveResource: wantResource,
-    });
-    setMaritimeOpen(false);
-  };
-
   const isCardPlayable = (card: HeldDevelopmentCard) =>
     isMainTurn &&
     card.type !== "victory-point" &&
@@ -196,6 +205,9 @@ export default function GameActions({
   const roadsLeft = 15 - (selfPlayer?.roadsBuilt ?? 0);
   const settlementsLeft = 5 - (selfPlayer?.settlementsBuilt ?? 0);
   const citiesLeft = 4 - (selfPlayer?.citiesBuilt ?? 0);
+  const canBuyDevelopmentCard =
+    canAfford(game.self.resources, { wood: 0, brick: 0, sheep: 1, wheat: 1, ore: 1 }) &&
+    game.developmentDeckCount > 0;
   const ownedResources = RESOURCES.filter((resource) => game.self.resources[resource] > 0);
 
   return (
@@ -238,7 +250,11 @@ export default function GameActions({
                       title={CARD_NAMES[card.type]}
                       draggable={false}
                     />
-                    {card.type === "victory-point" ? null : card.boughtOnTurn >= game.turnNumber ? (
+                    {card.type === "victory-point" ? (
+                      <span className="pr-1 text-[9px] font-bold text-[#8a6a3a]" title="Solo vos podés verla; cuenta +1 punto">
+                        Secreta · +1 PV
+                      </span>
+                    ) : card.boughtOnTurn >= game.turnNumber ? (
                       <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
                     ) : (
                       <button
@@ -266,12 +282,14 @@ export default function GameActions({
               className="inline-block h-2.5 w-2.5 rounded-full border border-[#8a5a1e]"
               style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }}
             />
-            {isMyTurn ? "Tu turno" : `Turno de ${currentPlayer?.name ?? "…"}`}
+            {isMyTurn
+              ? "Tu turno"
+              : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </div>
           {game.lastRoll ? (
-            <div className="flex items-center gap-1 text-[13px] font-black text-[#4a2c12]">
-              <Dices size={14} />
-              {game.lastRoll.dice[0]} + {game.lastRoll.dice[1]} = {game.lastRoll.total}
+            <div className="flex items-center gap-1.5">
+              <DieFace value={game.lastRoll.dice[0]} />
+              <DieFace value={game.lastRoll.dice[1]} />
             </div>
           ) : (
             <span className="flex items-center gap-1 text-[11px] font-semibold text-[#b08a4a]">
@@ -296,21 +314,25 @@ export default function GameActions({
         </section>
 
         <section
-          className="grid grid-cols-4 justify-end gap-1.5 max-[1180px]:gap-1 max-[940px]:grid-cols-4 max-[940px]:justify-stretch"
+          className="grid grid-cols-3 justify-end gap-1.5 max-[1180px]:gap-1 max-[940px]:grid-cols-3 max-[940px]:justify-stretch"
           aria-label="Acciones"
         >
           <ActionButton
             icon={<Handshake size={17} />}
             label="Comercio"
-            title="Ofrecer un intercambio a la mesa"
+            title="Cambiar cartas con el banco o proponer un intercambio a la mesa"
             disabled={busy || !isMainTurn}
             onClick={onOpenTrade}
           />
           <ActionButton
             icon={<Sparkles size={17} />}
             label="Carta"
-            title="Comprar carta de desarrollo (oveja + trigo + mineral)"
-            disabled={busy || !isMainTurn}
+            title={
+              game.developmentDeckCount === 0
+                ? "No quedan cartas de desarrollo"
+                : `Comprar carta de desarrollo (oveja + trigo + mineral) · quedan ${game.developmentDeckCount}`
+            }
+            disabled={busy || !isMainTurn || !canBuyDevelopmentCard}
             onClick={() => void onAction({ type: "buy-development-card" })}
           />
           <ActionButton
@@ -339,13 +361,6 @@ export default function GameActions({
             disabled={busy || !isMainTurn || room.legal.cityVertexIds.length === 0}
             count={citiesLeft}
             onClick={() => toggleMode("city")}
-          />
-          <ActionButton
-            icon={<Landmark size={17} />}
-            label="Banco"
-            title={`Intercambiar con el banco (tasa ${room.legal.tradeRatios[giveResource]}:1)`}
-            disabled={busy || !isMainTurn}
-            onClick={() => setMaritimeOpen(true)}
           />
           <ActionButton
             icon={<Hourglass size={17} />}
@@ -433,134 +448,6 @@ export default function GameActions({
         </div>
       )}
 
-      {maritimeOpen && isMainTurn && (
-        <div className={MODAL_BACKDROP} role="presentation" onClick={() => setMaritimeOpen(false)}>
-          <section
-            className={MODAL}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="maritime-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-2.5">
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a9793a]">
-                  Comercio marítimo
-                </p>
-                <h2 id="maritime-title" className="mt-1 font-display text-[22px] font-black text-[#4a2c12]">
-                  Intercambiar con el banco
-                </h2>
-              </div>
-              <button
-                className="border-0 bg-transparent text-[22px] leading-none text-[#a08a5e]"
-                type="button"
-                aria-label="Cerrar"
-                onClick={() => setMaritimeOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            <form onSubmit={submitMaritimeTrade}>
-              <div className="mt-3.5 grid grid-cols-1 items-center gap-2 min-[560px]:grid-cols-[1fr_26px_1fr]">
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#a9793a]">
-                    Entregás
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {RESOURCES.map((resource) => (
-                      <button
-                        key={resource}
-                        type="button"
-                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-lg transition ${
-                          giveResource === resource
-                            ? "outline outline-[3px] outline-offset-1 outline-[#d9a44a]"
-                            : "hover:-translate-y-0.5"
-                        }`}
-                        title={RESOURCE_NAMES[resource]}
-                        onClick={() => setGiveResource(resource)}
-                      >
-                        <img
-                          className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
-                          src={RESOURCE_CARD_FILES[resource]}
-                          alt={RESOURCE_NAMES[resource]}
-                          draggable={false}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    className="min-h-[42px] rounded-xl border-2 border-[#c9a86a] bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#4a2c12] outline-none focus:border-[#a9793a]"
-                    type="number"
-                    min={1}
-                    value={giveAmount}
-                    onChange={(event) => setGiveAmount(event.target.value)}
-                  />
-                  <div className="flex items-center gap-2">
-                    <img
-                      className="h-11 w-auto"
-                      src={RESOURCE_PORT_FILES[giveResource]}
-                      alt=""
-                      draggable={false}
-                    />
-                    <small className="text-[10px] font-semibold text-[#a08a5e]">
-                      Tasa {room.legal.tradeRatios[giveResource]}:1 para{" "}
-                      {RESOURCE_NAMES[giveResource]}
-                    </small>
-                  </div>
-                </div>
-                <div className="text-center text-xl font-black text-[#c0a273]">⇄</div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#a9793a]">
-                    Recibís
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {RESOURCES.filter((resource) => resource !== giveResource).map((resource) => (
-                      <button
-                        key={resource}
-                        type="button"
-                        className={`relative inline-flex h-[52px] w-[38px] items-center justify-center rounded-lg transition ${
-                          wantResource === resource
-                            ? "outline outline-[3px] outline-offset-1 outline-[#d9a44a]"
-                            : "hover:-translate-y-0.5"
-                        }`}
-                        title={RESOURCE_NAMES[resource]}
-                        onClick={() => setWantResource(resource)}
-                      >
-                        <img
-                          className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
-                          src={RESOURCE_CARD_FILES[resource]}
-                          alt={RESOURCE_NAMES[resource]}
-                          draggable={false}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className={MODAL_ACTIONS}>
-                <button
-                  className={CG_BUTTON_NEUTRAL}
-                  type="button"
-                  onClick={() => setMaritimeOpen(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className={CG_BUTTON_ACCEPT}
-                  type="submit"
-                  disabled={
-                    busy ||
-                    giveResource === wantResource ||
-                    Number(giveAmount) % room.legal.tradeRatios[giveResource] !== 0
-                  }
-                >
-                  Intercambiar
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
     </>
   );
 }

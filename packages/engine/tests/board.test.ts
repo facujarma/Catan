@@ -29,26 +29,32 @@ describe("generación del tablero", () => {
     expect(board.vertices.every((vertex) => vertex.edgeIds.length === 2 || vertex.edgeIds.length === 3)).toBe(true);
   });
 
-  it("usa la distribución correcta de fichas y separa los 6 y 8", () => {
-    const board = generateBoard("números");
-    const numberCounts = new Map<number, number>();
-    for (const hex of board.hexes) {
-      if (hex.number !== null) {
-        numberCounts.set(hex.number, (numberCounts.get(hex.number) ?? 0) + 1);
+  it("usa la distribución correcta de fichas y respeta la separación de números", () => {
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const board = generateBoard(seed);
+      const hexById = new Map(board.hexes.map((hex) => [hex.id, hex]));
+      const numberCounts = new Map<number, number>();
+      for (const hex of board.hexes) {
+        if (hex.number !== null) {
+          numberCounts.set(hex.number, (numberCounts.get(hex.number) ?? 0) + 1);
+        }
       }
-    }
 
-    expect(numberCounts.get(2)).toBe(1);
-    expect(numberCounts.get(12)).toBe(1);
-    for (const number of [3, 4, 5, 6, 8, 9, 10, 11]) {
-      expect(numberCounts.get(number)).toBe(2);
-    }
+      expect(numberCounts.get(2)).toBe(1);
+      expect(numberCounts.get(12)).toBe(1);
+      for (const number of [3, 4, 5, 6, 8, 9, 10, 11]) {
+        expect(numberCounts.get(number)).toBe(2);
+      }
 
-    const hexById = new Map(board.hexes.map((hex) => [hex.id, hex]));
-    for (const hex of board.hexes.filter((candidate) => candidate.number === 6 || candidate.number === 8)) {
-      for (const neighborId of hex.neighborHexIds) {
-        const neighbor = hexById.get(neighborId)!;
-        expect([6, 8]).not.toContain(neighbor.number);
+      for (const hex of board.hexes) {
+        if (hex.number === null) continue;
+        for (const neighborId of hex.neighborHexIds) {
+          const neighbor = hexById.get(neighborId)!;
+          expect(neighbor.number).not.toBe(hex.number);
+          if (hex.number === 6 || hex.number === 8) {
+            expect([6, 8]).not.toContain(neighbor.number);
+          }
+        }
       }
     }
   });

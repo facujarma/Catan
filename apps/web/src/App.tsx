@@ -14,11 +14,8 @@ import {
   saveGuestName,
   saveRoomCode,
 } from "./identity";
-import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD } from "./ui";
+import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD, TABLE_BACKGROUND } from "./ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "./model";
-
-const TABLE_BACKGROUND =
-  "[background-image:repeating-linear-gradient(90deg,#573924_0px,#573924_80px,#4e321f_80px,#4e321f_160px)]";
 
 export default function App() {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim();

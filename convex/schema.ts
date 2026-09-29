@@ -24,6 +24,8 @@ export default defineSchema({
     turnTimeLimitSeconds: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
+    turnResumeRemainingMs: v.optional(v.number()),
+    tradeRespondDeadlineAt: v.optional(v.number()),
     turnStats: v.optional(
       v.record(
         v.string(),

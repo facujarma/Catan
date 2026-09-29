@@ -137,6 +137,7 @@ export function createGame(options: CreateGameOptions): GameState {
     turnNumber: 0,
     robberHexId: desert.id,
     pendingDiscards: {},
+    pendingRobberVictim: null,
     activeTrade: null,
     longestRoadHolderId: null,
     largestArmyHolderId: null,
@@ -187,6 +188,12 @@ function cloneGameState(state: GameState): GameState {
     bank: { ...state.bank },
     developmentDeck: state.developmentDeck.map((card) => ({ ...card })),
     pendingDiscards: { ...state.pendingDiscards },
+    pendingRobberVictim: state.pendingRobberVictim
+      ? {
+          hexId: state.pendingRobberVictim.hexId,
+          victimIds: [...state.pendingRobberVictim.victimIds],
+        }
+      : null,
     activeTrade: state.activeTrade
       ? {
           ...state.activeTrade,
@@ -462,20 +469,44 @@ function moveRobber(
   }
 
   const victims = getVictimsAtHex(state, hexId, playerId);
-  let victim: PlayerState | undefined;
+  state.robberHexId = hexId;
+  state.pendingRobberVictim = null;
+
   if (victimId !== null) {
-    victim = victims.find((candidate) => candidate.id === victimId);
+    const victim = victims.find((candidate) => candidate.id === victimId);
     if (!victim) {
       fail("INVALID_ROBBER_MOVE", "El jugador elegido no tiene una construcción junto al hexágono.");
     }
-  } else if (victims.length > 1) {
-    fail("CHOOSE_VICTIM", "Hay más de un jugador para robar; elegí uno.");
-  } else {
-    victim = victims[0];
+    stealRandomResource(getPlayer(state, playerId), victim, random);
+    return;
   }
 
-  state.robberHexId = hexId;
+  if (victims.length > 1) {
+    state.pendingRobberVictim = {
+      hexId,
+      victimIds: victims.map((candidate) => candidate.id),
+    };
+    return;
+  }
+
+  const victim = victims[0];
   if (victim) stealRandomResource(getPlayer(state, playerId), victim, random);
+}
+
+function chooseRobberVictim(
+  state: GameState,
+  playerId: string,
+  victimId: string,
+  random: SeededRandom,
+): void {
+  requirePhase(state, "robber-victim");
+  requireCurrentPlayer(state, playerId);
+  const pending = state.pendingRobberVictim;
+  if (!pending || !pending.victimIds.includes(victimId)) {
+    fail("INVALID_ROBBER_MOVE", "Elegí a un jugador con construcciones junto al ladrón.");
+  }
+  stealRandomResource(getPlayer(state, playerId), getPlayer(state, victimId), random);
+  state.pendingRobberVictim = null;
 }
 
 function produceResources(state: GameState, roll: number): void {
@@ -809,20 +840,15 @@ function buyDevelopmentCard(state: GameState, playerId: string): void {
   player.developmentCards.push({ ...card, boughtOnTurn: state.turnNumber });
 }
 
-function playKnight(
-  state: GameState,
-  playerId: string,
-  cardId: string,
-  hexId: string,
-  victimId: string | null,
-  random: SeededRandom,
-): void {
+function playKnight(state: GameState, playerId: string, cardId: string): void {
   const player = requireMainTurn(state, playerId);
   const card = requireDevelopmentCard(state, player, cardId, "knight");
-  moveRobber(state, playerId, hexId, victimId, random);
   discardDevelopmentCard(player, card.id);
   player.playedKnights += 1;
   state.playedDevelopmentCardThisTurn = true;
+  state.activeTrade = null;
+  state.pendingRobberVictim = null;
+  state.phase = "robber";
   recalculateAwards(state);
 }
 
@@ -936,6 +962,11 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       requirePhase(next, "robber");
       requireCurrentPlayer(next, action.playerId);
       moveRobber(next, action.playerId, action.hexId, action.victimId, random);
+      next.phase = next.pendingRobberVictim ? "robber-victim" : "main";
+      break;
+
+    case "choose-robber-victim":
+      chooseRobberVictim(next, action.playerId, action.victimId, random);
       next.phase = "main";
       break;
 
@@ -956,14 +987,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       break;
 
     case "play-knight":
-      playKnight(
-        next,
-        action.playerId,
-        action.cardId,
-        action.hexId,
-        action.victimId,
-        random,
-      );
+      playKnight(next, action.playerId, action.cardId);
       break;
 
     case "play-monopoly":
@@ -1048,6 +1072,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       next.phase = "awaiting-roll";
       next.playedDevelopmentCardThisTurn = false;
       next.activeTrade = null;
+      next.pendingRobberVictim = null;
       break;
     }
 

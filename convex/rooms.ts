@@ -26,9 +26,14 @@ const MAX_MESSAGE_LENGTH = 500;
 const DEFAULT_TURN_TIME_LIMIT_SECONDS = 60;
 const MIN_TURN_TIME_LIMIT_SECONDS = 10;
 const MAX_TURN_TIME_LIMIT_SECONDS = 600;
-const BOT_ACTION_DELAY_MS = 5_000;
+const BOT_ACTION_DELAY_MS = 4_500;
 const MAX_BOT_ACTIONS_PER_RUN = 8;
 const MAX_TIMEOUT_ACTIONS_PER_RUN = 16;
+const ROLL_WINDOW_MS = 5_000;
+const DISCARD_WINDOW_MS = 20_000;
+const ROBBER_WINDOW_MS = 20_000;
+const OFFER_WINDOW_MS = 15_000;
+const TRADE_RESPONSE_WINDOW_MS = 5_000;
 
 type RoomMember = RoomDocument["players"][number];
 
@@ -41,8 +46,21 @@ interface TurnStat {
 interface GameFlow {
   state: GameState;
   turnStartedAt: number | null;
+  turnDeadlineAt: number | null;
+  turnResumeRemainingMs: number | null;
+  tradeRespondDeadlineAt: number | null;
   turnStats: Record<string, TurnStat>;
 }
+
+type GameStep =
+  | "setup"
+  | "roll"
+  | "discard"
+  | "robber"
+  | "robber-victim"
+  | "main"
+  | "trade"
+  | "finished";
 
 interface FlowEvent {
   actorId: string | null;
@@ -138,11 +156,16 @@ function actionLogMessage(action: GameAction, playerName: string, nextState: Gam
     case "build-city":
       return `${playerName} mejoró un poblado a ciudad.`;
     case "roll":
-      return `${playerName} tiró ${nextState.lastRoll?.dice.join(" + ") ?? "los dados"} (${nextState.lastRoll?.total ?? "?"}).`;
+      return `${playerName} tiró ${nextState.lastRoll?.dice.join(" y ") ?? "los dados"}.`;
     case "discard":
       return `${playerName} descartó cartas tras un siete.`;
     case "move-robber":
       return `${playerName} movió al ladrón.`;
+    case "choose-robber-victim": {
+      const victimName =
+        nextState.players.find((player) => player.id === action.victimId)?.name ?? "un rival";
+      return `${playerName} le robó una carta a ${victimName}.`;
+    }
     case "buy-development-card":
       return `${playerName} compró una carta de desarrollo.`;
     case "play-knight":
@@ -240,14 +263,17 @@ function randomDiscardBundle(state: GameState, playerId: string, count: number):
   return bundle;
 }
 
-function randomRobberAction(state: GameState, playerId: string): GameAction | null {
+function randomRobberHexAction(state: GameState, playerId: string): GameAction | null {
   const hexId = randomItem(
     state.board.hexes.filter((hex) => hex.id !== state.robberHexId).map((hex) => hex.id),
   );
-  if (!hexId) return null;
-  const victims = getRobberVictims(state, hexId, playerId);
-  const victimId = victims.length > 1 ? randomItem(victims) : victims[0] ?? null;
-  return { type: "move-robber", playerId, hexId, victimId };
+  return hexId ? { type: "move-robber", playerId, hexId, victimId: null } : null;
+}
+
+function randomVictimAction(state: GameState, playerId: string): GameAction | null {
+  const pending = state.pendingRobberVictim;
+  const victimId = pending ? randomItem(pending.victimIds) : null;
+  return victimId ? { type: "choose-robber-victim", playerId, victimId } : null;
 }
 
 function botTurnAction(state: GameState, playerId: string): GameAction | null {
@@ -263,7 +289,9 @@ function botTurnAction(state: GameState, playerId: string): GameAction | null {
     case "awaiting-roll":
       return { type: "roll", playerId };
     case "robber":
-      return randomRobberAction(state, playerId);
+      return randomRobberHexAction(state, playerId);
+    case "robber-victim":
+      return randomVictimAction(state, playerId);
     case "main":
     case "trade":
       return { type: "end-turn", playerId };
@@ -272,16 +300,87 @@ function botTurnAction(state: GameState, playerId: string): GameAction | null {
   }
 }
 
-function timeoutAction(state: GameState, timedOutPlayerId: string): GameAction | null {
-  if (state.phase === "finished") return null;
-  if (state.phase === "discard") {
-    const playerId = Object.keys(state.pendingDiscards)[0];
-    if (!playerId) return null;
-    const count = state.pendingDiscards[playerId]!;
-    return { type: "discard", playerId, resources: randomDiscardBundle(state, playerId, count) };
+function deadlineAction(state: GameState): GameAction | null {
+  const playerId = playerIdAt(state);
+  switch (state.phase) {
+    case "setup-settlement":
+    case "setup-road":
+    case "awaiting-roll":
+    case "robber":
+    case "robber-victim":
+      return botTurnAction(state, playerId);
+    case "discard": {
+      const discardPlayerId = Object.keys(state.pendingDiscards)[0];
+      if (!discardPlayerId) return null;
+      return {
+        type: "discard",
+        playerId: discardPlayerId,
+        resources: randomDiscardBundle(
+          state,
+          discardPlayerId,
+          state.pendingDiscards[discardPlayerId]!,
+        ),
+      };
+    }
+    case "main":
+      return { type: "end-turn", playerId };
+    case "trade": {
+      const offer = state.activeTrade;
+      if (!offer) return null;
+      const partnerId = randomItem(offer.acceptedBy);
+      return partnerId
+        ? { type: "confirm-offer", playerId: offer.fromPlayerId, partnerId }
+        : { type: "cancel-offer", playerId: offer.fromPlayerId };
+    }
+    case "finished":
+      return null;
   }
-  if (playerIdAt(state) !== timedOutPlayerId) return null;
-  return botTurnAction(state, timedOutPlayerId);
+}
+
+function stepOf(state: GameState): GameStep {
+  switch (state.phase) {
+    case "setup-settlement":
+    case "setup-road":
+      return "setup";
+    case "awaiting-roll":
+      return "roll";
+    case "discard":
+      return "discard";
+    case "robber":
+      return "robber";
+    case "robber-victim":
+      return "robber-victim";
+    case "main":
+      return "main";
+    case "trade":
+      return "trade";
+    case "finished":
+      return "finished";
+  }
+}
+
+function stepDurationMs(step: GameStep, limitSeconds: number): number | null {
+  switch (step) {
+    case "roll":
+      return ROLL_WINDOW_MS;
+    case "discard":
+      return DISCARD_WINDOW_MS;
+    case "robber":
+    case "robber-victim":
+      return ROBBER_WINDOW_MS;
+    case "trade":
+      return OFFER_WINDOW_MS;
+    case "setup":
+    case "main":
+      return limitSeconds > 0 ? limitSeconds * 1000 : null;
+    case "finished":
+      return null;
+  }
+}
+
+function deadlineFor(step: GameStep, now: number, limitSeconds: number): number | null {
+  const duration = stepDurationMs(step, limitSeconds);
+  return duration === null ? null : now + duration;
 }
 
 function gameFlowFromRoom(room: RoomDocument): GameFlow | null {
@@ -290,6 +389,9 @@ function gameFlowFromRoom(room: RoomDocument): GameFlow | null {
   return {
     state,
     turnStartedAt: room.turnStartedAt ?? null,
+    turnDeadlineAt: room.turnDeadlineAt ?? null,
+    turnResumeRemainingMs: room.turnResumeRemainingMs ?? null,
+    tradeRespondDeadlineAt: room.tradeRespondDeadlineAt ?? null,
     turnStats: { ...(room.turnStats ?? {}) },
   };
 }
@@ -298,6 +400,7 @@ function advanceGameFlow(room: RoomDocument, flow: GameFlow, action: GameAction)
   const previous = flow.state;
   const next = applyAction(previous, action);
   const now = Date.now();
+  const limitSeconds = room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS;
   const previousPlayerId = playerIdAt(previous);
   const nextPlayerId = playerIdAt(next);
   const playerChanged = previousPlayerId !== nextPlayerId;
@@ -323,7 +426,53 @@ function advanceGameFlow(room: RoomDocument, flow: GameFlow, action: GameAction)
     turnStartedAt = now;
   }
 
-  return { state: next, turnStartedAt, turnStats };
+  let turnDeadlineAt = flow.turnDeadlineAt;
+  let turnResumeRemainingMs = flow.turnResumeRemainingMs;
+  let tradeRespondDeadlineAt = flow.tradeRespondDeadlineAt;
+
+  if (finished) {
+    turnDeadlineAt = null;
+    turnResumeRemainingMs = null;
+    tradeRespondDeadlineAt = null;
+  } else {
+    const previousStep = stepOf(previous);
+    const nextStep = stepOf(next);
+
+    if (playerChanged || turnAdvanced) {
+      turnResumeRemainingMs = null;
+      tradeRespondDeadlineAt = null;
+      turnDeadlineAt = deadlineFor(nextStep, now, limitSeconds);
+    } else if (nextStep !== previousStep) {
+      if (nextStep === "main") {
+        turnDeadlineAt =
+          turnResumeRemainingMs !== null
+            ? now + turnResumeRemainingMs
+            : deadlineFor("main", now, limitSeconds);
+        turnResumeRemainingMs = null;
+        tradeRespondDeadlineAt = null;
+      } else if (previousStep === "main" && (nextStep === "robber" || nextStep === "trade")) {
+        turnResumeRemainingMs =
+          turnDeadlineAt !== null ? Math.max(0, turnDeadlineAt - now) : null;
+        turnDeadlineAt = deadlineFor(nextStep, now, limitSeconds);
+        tradeRespondDeadlineAt = nextStep === "trade" ? now + TRADE_RESPONSE_WINDOW_MS : null;
+      } else {
+        turnDeadlineAt = deadlineFor(nextStep, now, limitSeconds);
+        tradeRespondDeadlineAt = nextStep === "trade" ? now + TRADE_RESPONSE_WINDOW_MS : null;
+      }
+    } else if (previousStep === "trade" && previous.activeTrade?.id !== next.activeTrade?.id) {
+      turnDeadlineAt = now + OFFER_WINDOW_MS;
+      tradeRespondDeadlineAt = now + TRADE_RESPONSE_WINDOW_MS;
+    }
+  }
+
+  return {
+    state: next,
+    turnStartedAt,
+    turnDeadlineAt,
+    turnResumeRemainingMs,
+    tradeRespondDeadlineAt,
+    turnStats,
+  };
 }
 
 function actionEvent(action: GameAction, actorName: string, nextState: GameState): FlowEvent {
@@ -335,6 +484,27 @@ function actionEvent(action: GameAction, actorName: string, nextState: GameState
   };
 }
 
+function deadlineMessage(step: GameStep, playerName: string): string {
+  switch (step) {
+    case "roll":
+      return `Se agotó el tiempo de ${playerName} para tirar; los dados se tiraron solos.`;
+    case "discard":
+      return "Se agotó el tiempo de descarte; se descartaron cartas al azar.";
+    case "robber":
+      return `Se agotó el tiempo de ${playerName} para mover al ladrón; se movió al azar.`;
+    case "robber-victim":
+      return `Se agotó el tiempo de ${playerName} para elegir a quién robar; se eligió al azar.`;
+    case "trade":
+      return "Se agotó el tiempo del comercio; se resolvió automáticamente.";
+    case "setup":
+      return "Se agotó el tiempo de colocación inicial; se colocó al azar.";
+    case "main":
+      return `Se agotó el tiempo de ${playerName}; se pasó el turno.`;
+    case "finished":
+      return "";
+  }
+}
+
 async function commitGameFlow(
   ctx: MutationCtx,
   room: RoomDocument,
@@ -343,11 +513,6 @@ async function commitGameFlow(
 ): Promise<void> {
   const now = Date.now();
   const finished = flow.state.phase === "finished";
-  const limitSeconds = room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS;
-  const deadline =
-    !finished && limitSeconds > 0 && flow.turnStartedAt !== null
-      ? flow.turnStartedAt + limitSeconds * 1000
-      : null;
   const botKey = finished ? null : botActionKey(room, flow.state);
 
   await ctx.db.patch(room._id, {
@@ -355,7 +520,9 @@ async function commitGameFlow(
     status: finished ? "finished" : "playing",
     updatedAt: now,
     turnStartedAt: flow.turnStartedAt ?? undefined,
-    turnDeadlineAt: deadline ?? undefined,
+    turnDeadlineAt: flow.turnDeadlineAt ?? undefined,
+    turnResumeRemainingMs: flow.turnResumeRemainingMs ?? undefined,
+    tradeRespondDeadlineAt: flow.tradeRespondDeadlineAt ?? undefined,
     turnStats: flow.turnStats,
     botTurnKey: botKey ?? undefined,
   });
@@ -364,11 +531,26 @@ async function commitGameFlow(
     await writeEvent(ctx, room, event.actorId, event.actorName, event.kind, event.message);
   }
 
-  if (deadline !== null) {
-    await ctx.scheduler.runAfter(Math.max(0, deadline - now), internal.rooms.enforceTurnTimeout, {
-      roomId: room._id,
-      expectedDeadline: deadline,
-    });
+  if (flow.turnDeadlineAt !== null) {
+    await ctx.scheduler.runAfter(
+      Math.max(0, flow.turnDeadlineAt - now),
+      internal.rooms.enforceTurnTimeout,
+      {
+        roomId: room._id,
+        expectedDeadline: flow.turnDeadlineAt,
+      },
+    );
+  }
+
+  if (flow.tradeRespondDeadlineAt !== null) {
+    await ctx.scheduler.runAfter(
+      Math.max(0, flow.tradeRespondDeadlineAt - now),
+      internal.rooms.expireTradeResponses,
+      {
+        roomId: room._id,
+        expectedDeadline: flow.tradeRespondDeadlineAt,
+      },
+    );
   }
 
   if (botKey !== null && room.botTurnKey !== botKey) {
@@ -592,9 +774,17 @@ export const startGame = mutation({
       "system",
       `Orden de turnos: ${gameState.players.map((player) => player.name).join(" → ")}.`,
     );
+    const now = Date.now();
     await commitGameFlow(ctx, room, {
       state: gameState,
-      turnStartedAt: Date.now(),
+      turnStartedAt: now,
+      turnDeadlineAt: deadlineFor(
+        "setup",
+        now,
+        room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS,
+      ),
+      turnResumeRemainingMs: null,
+      tradeRespondDeadlineAt: null,
       turnStats: {},
     });
     return { started: true };
@@ -641,6 +831,7 @@ export const getRoom = query({
       })),
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS,
       turnDeadlineAt: room.turnDeadlineAt ?? null,
+      tradeRespondDeadlineAt: room.tradeRespondDeadlineAt ?? null,
       turnStats: room.turnStats ?? {},
       game: gameState ? getPlayerView(gameState, member.id) : null,
       legal: gameState
@@ -849,24 +1040,66 @@ export const enforceTurnTimeout = internalMutation({
     let flow = gameFlowFromRoom(room);
     if (!flow) return null;
 
-    const timedOutPlayerId = playerIdAt(flow.state);
-    const timedOutName = playerName(room, timedOutPlayerId);
+    const expiredPlayerId = playerIdAt(flow.state);
+    const expiredPlayerName = playerName(room, expiredPlayerId);
+    const expiredStep = stepOf(flow.state);
     const events: FlowEvent[] = [];
+
     for (let step = 0; step < MAX_TIMEOUT_ACTIONS_PER_RUN; step += 1) {
-      const action = timeoutAction(flow.state, timedOutPlayerId);
+      const action = deadlineAction(flow.state);
       if (!action) break;
+      const playerBefore = playerIdAt(flow.state);
+      const stepBefore = stepOf(flow.state);
       flow = advanceGameFlow(room, flow, action);
       events.push(actionEvent(action, playerName(room, action.playerId), flow.state));
       if (flow.state.phase === "finished") break;
+      if (stepOf(flow.state) !== stepBefore || playerIdAt(flow.state) !== playerBefore) break;
     }
 
     if (events.length === 0) return null;
     events.unshift({
-      actorId: timedOutPlayerId,
-      actorName: timedOutName,
+      actorId: expiredPlayerId,
+      actorName: expiredPlayerName,
       kind: "system",
-      message: `Se agotó el tiempo de ${timedOutName}.`,
+      message: deadlineMessage(expiredStep, expiredPlayerName),
     });
+
+    await commitGameFlow(ctx, room, flow, events);
+    return null;
+  },
+});
+
+export const expireTradeResponses = internalMutation({
+  args: { roomId: v.id("rooms"), expectedDeadline: v.number() },
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get("rooms", args.roomId);
+    if (!room || room.status !== "playing") return null;
+    if (room.tradeRespondDeadlineAt !== args.expectedDeadline) return null;
+    if (Date.now() < args.expectedDeadline) return null;
+    let flow = gameFlowFromRoom(room);
+    if (!flow) return null;
+    const offer = flow.state.activeTrade;
+    if (flow.state.phase !== "trade" || !offer) return null;
+
+    const pendingResponders = flow.state.players.filter(
+      (player) => player.id !== offer.fromPlayerId && !offer.acceptedBy.includes(player.id),
+    );
+    for (const responder of pendingResponders) {
+      flow = advanceGameFlow(room, flow, { type: "reject-offer", playerId: responder.id });
+    }
+    flow = { ...flow, tradeRespondDeadlineAt: null };
+
+    const events: FlowEvent[] =
+      pendingResponders.length > 0
+        ? [
+            {
+              actorId: null,
+              actorName: "Mesa",
+              kind: "system",
+              message: "Los jugadores que no respondieron a tiempo rechazaron la oferta.",
+            },
+          ]
+        : [];
 
     await commitGameFlow(ctx, room, flow, events);
     return null;

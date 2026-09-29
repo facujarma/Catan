@@ -18,7 +18,14 @@ import {
 } from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
 import { RESOURCE_CARD_FILES } from "../assets";
-import { CG_BUTTON_ACCEPT, CG_BUTTON_NEUTRAL, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
+import {
+  CG_BUTTON_ACCEPT,
+  CG_BUTTON_NEUTRAL,
+  MODAL,
+  MODAL_ACTIONS,
+  MODAL_BACKDROP,
+  WOOD_BACKGROUND,
+} from "../ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "../model";
 
 interface GameRoomProps {
@@ -34,7 +41,7 @@ interface GameRoomProps {
 }
 
 const MODAL_EYEBROW = "text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]";
-const MODAL_TITLE = "mt-1 text-[22px] font-black text-[#2c3c30]";
+const MODAL_TITLE = "mt-1 font-display text-[22px] font-black text-[#4a2c12]";
 const MODAL_CLOSE = "border-0 bg-transparent text-[22px] leading-none text-[#8b8271]";
 const MODAL_NOTE = "mt-2 text-xs leading-[1.5] text-ink-soft";
 
@@ -54,7 +61,6 @@ export default function GameRoom({
   const [selectedCard, setSelectedCard] = useState<HeldDevelopmentCard | null>(null);
   const [selectedRoadIds, setSelectedRoadIds] = useState<string[]>([]);
   const [plentyResources, setPlentyResources] = useState<Resource[]>([]);
-  const [pendingRobberHexId, setPendingRobberHexId] = useState<string | null>(null);
   const [tradeComposer, setTradeComposer] = useState<null | "new" | "counter">(null);
 
   const isMyTurn = game.currentPlayerId === room.selfPlayerId;
@@ -63,47 +69,27 @@ export default function GameRoom({
     (player) => player.id === game.currentPlayerId && player.isBot,
   );
   const offer = game.activeTrade;
-  const eligibleVictims = pendingRobberHexId
-    ? playersAdjacentToHex(pendingRobberHexId).filter((player) => player.resourceCardCount > 0)
+  const pendingVictim = game.pendingRobberVictim;
+  const eligibleVictims = pendingVictim
+    ? pendingVictim.victimIds
+        .map((victimId) => game.players.find((player) => player.id === victimId))
+        .filter((player): player is NonNullable<typeof player> => player !== undefined)
     : [];
-
-  function playersAdjacentToHex(hexId: string) {
-    const adjacentVertexIds = new Set(
-      game.board.vertices.filter((vertex) => vertex.hexIds.includes(hexId)).map((vertex) => vertex.id),
-    );
-    return game.players.filter(
-      (player) =>
-        player.id !== room.selfPlayerId &&
-        [...player.settlementVertexIds, ...player.cityVertexIds].some((vertexId) =>
-          adjacentVertexIds.has(vertexId),
-        ),
-    );
-  }
 
   const resetSelection = () => {
     setMode(null);
     setSelectedCard(null);
     setSelectedRoadIds([]);
     setPlentyResources([]);
-    setPendingRobberHexId(null);
-  };
-
-  const submitRobberMove = async (hexId: string, victimId: string | null) => {
-    if (selectedCard?.type === "knight") {
-      await onAction({ type: "play-knight", cardId: selectedCard.id, hexId, victimId });
-    } else {
-      await onAction({ type: "move-robber", hexId, victimId });
-    }
-    resetSelection();
   };
 
   const handleHexClick = (hexId: string) => {
-    const victims = playersAdjacentToHex(hexId).filter((player) => player.resourceCardCount > 0);
-    if (victims.length > 1) {
-      setPendingRobberHexId(hexId);
-      return;
-    }
-    void submitRobberMove(hexId, victims[0]?.id ?? null);
+    if (game.phase !== "robber" || !isMyTurn) return;
+    void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
+  };
+
+  const chooseVictim = (victimId: string) => {
+    void onAction({ type: "choose-robber-victim", victimId }).then(resetSelection);
   };
 
   const handleVertexClick = (vertexId: string) => {
@@ -133,13 +119,18 @@ export default function GameRoom({
   };
 
   const selectDevelopmentCard = (card: HeldDevelopmentCard | null) => {
+    if (!card) {
+      setSelectedCard(null);
+      return;
+    }
+    if (card.type === "knight") {
+      void onAction({ type: "play-knight", cardId: card.id }).then(resetSelection);
+      return;
+    }
     setSelectedCard(card);
-    if (!card) return;
     setSelectedRoadIds([]);
     setPlentyResources([]);
-    setMode(
-      card.type === "knight" ? "robber" : card.type === "road-building" ? "free-road" : null,
-    );
+    setMode(card.type === "road-building" ? "free-road" : null);
   };
 
   const playMonopoly = (resource: Resource) => {
@@ -178,14 +169,13 @@ export default function GameRoom({
     }).then(resetSelection);
   };
 
-  const robberTargetName = game.board.hexes.find((hex) => hex.id === pendingRobberHexId)?.id;
+  const robberTargetName = pendingVictim?.hexId;
   const requiredPlentyCards = Math.min(2, RESOURCES.reduce((sum, resource) => sum + game.bank[resource], 0));
   const otherPlayers = game.players.filter((player) => player.id !== room.selfPlayerId);
   const selfPlayer = game.players.find((player) => player.id === room.selfPlayerId);
 
   const hint = (() => {
     if (game.phase === "finished") return null;
-    if (selectedCard?.type === "knight") return "Caballero: elegí en el tablero el nuevo territorio del ladrón.";
     if (selectedCard?.type === "road-building") {
       return `Caminos gratis: elegí hasta dos aristas conectadas (${selectedRoadIds.length}/2).`;
     }
@@ -198,6 +188,9 @@ export default function GameRoom({
     if (game.phase === "robber") {
       return isMyTurn ? "Elegí un hexágono para mover al ladrón." : "El jugador activo está moviendo al ladrón.";
     }
+    if (game.phase === "robber-victim") {
+      return isMyTurn ? "Elegí a quién robarle una carta." : "El jugador activo está eligiendo a quién robar.";
+    }
     if (game.phase === "main" && isMyTurn && mode) {
       const action = mode === "road" ? "construir el camino" : mode === "settlement" ? "construir el poblado" : "mejorar el poblado";
       return `Elegí en el tablero dónde ${action}. Volvé a tocar el botón para cancelar.`;
@@ -209,7 +202,9 @@ export default function GameRoom({
   })();
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-gradient-to-b from-ocean-light via-ocean to-ocean-deep text-ink">
+    <div
+      className={`relative flex h-full w-full flex-col overflow-hidden bg-[#4a2e1c] ${WOOD_BACKGROUND} text-[#4a2c12]`}
+    >
       <header className="z-20 flex shrink-0 items-center justify-between gap-2.5 border-b-2 border-[#8a5a1e] bg-[#4a2e1c]/95 px-3 py-1.5 shadow-[0_3px_0_rgba(30,16,6,0.35)]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="grid h-7 w-7 place-items-center rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] text-sm shadow-[0_2px_0_#8a5a1e]">
@@ -261,7 +256,7 @@ export default function GameRoom({
           className="flex min-h-0 flex-col gap-1.5 overflow-x-hidden overflow-y-auto max-[940px]:flex-row max-[940px]:overflow-x-auto max-[940px]:overflow-y-hidden"
           aria-label="Jugadores"
         >
-          <h2 className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/80 max-[940px]:hidden">
+          <h2 className="font-display text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#e8d3a8] max-[940px]:hidden">
             Jugadores
           </h2>
           {otherPlayers.map((player) => (
@@ -285,7 +280,7 @@ export default function GameRoom({
           )}
         </aside>
 
-        <section className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12),0_6px_20px_rgba(7,30,48,0.25)]">
+        <section className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[0_4px_0_rgba(30,16,6,0.35),inset_0_0_0_1px_rgba(255,255,255,0.12)]">
           <BoardSvg
             game={game}
             legal={demo ? emptyLegalPlacements : room.legal}
@@ -302,6 +297,7 @@ export default function GameRoom({
               game={game}
               selfPlayerId={room.selfPlayerId}
               busy={busy}
+              respondDeadlineAt={room.tradeRespondDeadlineAt}
               onAction={onAction}
               onCounter={() => setTradeComposer("counter")}
             />
@@ -329,27 +325,21 @@ export default function GameRoom({
                   </button>
                 </>
               )}
-              {selectedCard?.type === "knight" && (
-                <button
-                  className="ml-2.5 border-0 bg-transparent font-display font-extrabold text-[#ffd76a] underline disabled:opacity-50"
-                  type="button"
-                  onClick={resetSelection}
-                >
-                  Cancelar
-                </button>
-              )}
+
             </div>
           )}
 
           {game.phase === "finished" && (
-            <div className="absolute inset-0 z-40 grid place-items-center bg-[#082234]/[0.55]">
-              <div className="rounded-2xl bg-paper-soft px-8 py-5 text-center shadow-[0_18px_50px_rgba(5,22,36,0.45)]">
-                <h2 className="text-[26px] font-black text-[#2d5c33]">
+            <div className="absolute inset-0 z-40 grid place-items-center bg-[#2a1810]/70">
+              <div className="rounded-3xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-8 py-5 text-center shadow-[0_8px_0_rgba(74,44,18,0.35),0_18px_50px_rgba(5,22,36,0.45)]">
+                <h2 className="font-display text-[26px] font-extrabold text-[#4a2c12]">
                   {game.winnerId === room.selfPlayerId
                     ? "¡Ganaste la partida!"
                     : `Ganó ${game.players.find((player) => player.id === game.winnerId)?.name ?? "un jugador"}`}
                 </h2>
-                <p className="mt-1.5 text-[13px] text-ink-soft">10 puntos de victoria</p>
+                <p className="mt-1.5 text-[13px] font-semibold text-[#8a6a3a]">
+                  10 puntos de victoria
+                </p>
               </div>
             </div>
           )}
@@ -422,6 +412,7 @@ export default function GameRoom({
           game={game}
           busy={busy}
           counter={tradeComposer === "counter"}
+          tradeRatios={room.legal.tradeRatios}
           onClose={() => setTradeComposer(null)}
           onAction={onAction}
         />
@@ -541,7 +532,7 @@ export default function GameRoom({
         </div>
       )}
 
-      {!demo && pendingRobberHexId && (
+      {!demo && pendingVictim && isMyTurn && (
         <div className={MODAL_BACKDROP} role="presentation">
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="victim-title">
             <div className="flex items-start justify-between gap-2.5">
@@ -551,16 +542,11 @@ export default function GameRoom({
                   Elegí a quién robar
                 </h2>
               </div>
-              <button
-                className={MODAL_CLOSE}
-                type="button"
-                aria-label="Cerrar"
-                onClick={() => setPendingRobberHexId(null)}
-              >
-                ×
-              </button>
             </div>
-            <p className={MODAL_NOTE}>Hay varios rivales con construcciones junto a este territorio.</p>
+            <p className={MODAL_NOTE}>
+              Hay varios rivales con construcciones junto a este territorio. Si no elegís, se
+              resuelve al azar.
+            </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
               {eligibleVictims.map((player) => (
                 <button
@@ -568,7 +554,7 @@ export default function GameRoom({
                   className={CG_BUTTON_NEUTRAL}
                   type="button"
                   disabled={busy}
-                  onClick={() => void submitRobberMove(pendingRobberHexId, player.id)}
+                  onClick={() => chooseVictim(player.id)}
                 >
                   {player.name} · {player.resourceCardCount} recursos
                 </button>
@@ -721,8 +707,10 @@ function TurnTimer({ deadlineAt }: { deadlineAt: number }) {
 
   return (
     <span
-      className={`rounded-full px-2.5 py-[3px] font-mono text-[11px] font-bold ${
-        urgent ? "bg-[#ffe1d9] text-[#9c3b28]" : "bg-[#dcecf7] text-[#1f4f6e]"
+      className={`rounded-full border-2 px-2.5 py-[2px] font-mono text-[11px] font-bold ${
+        urgent
+          ? "border-[#a4462f] bg-[#f6dcd6] text-[#8a3a22]"
+          : "border-[#d9a44a] bg-[#ffe9b8] text-[#7a5320]"
       }`}
       title="Tiempo restante del turno"
     >

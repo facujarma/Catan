@@ -32,9 +32,11 @@ const STANDARD_TERRAINS: Terrain[] = [
   "desert",
 ];
 
-const STANDARD_NUMBER_TOKENS = [
-  2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12,
+const OFFICIAL_NUMBER_SEQUENCE = [
+  5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11,
 ];
+
+const BOARD_RADIUS = 2;
 
 interface AxialCoordinate {
   q: number;
@@ -67,6 +69,32 @@ function positionKey(x: number, y: number): string {
   return `${Math.round(x * 10_000)},${Math.round(y * 10_000)}`;
 }
 
+function buildNumberSpiral(startDirection: number): AxialCoordinate[] {
+  const path: AxialCoordinate[] = [];
+  let current: AxialCoordinate = { q: 0, r: 0 };
+  const initialDirection = AXIAL_DIRECTIONS[startDirection]!;
+  for (let step = 0; step < BOARD_RADIUS; step += 1) {
+    current = { q: current.q + initialDirection[0], r: current.r + initialDirection[1] };
+  }
+
+  let radius = BOARD_RADIUS;
+  while (radius > 0) {
+    for (let side = 0; side < 6; side += 1) {
+      const direction = AXIAL_DIRECTIONS[(startDirection + 2 + side) % 6]!;
+      for (let step = 0; step < radius; step += 1) {
+        path.push(current);
+        current = { q: current.q + direction[0], r: current.r + direction[1] };
+      }
+    }
+    const inward = AXIAL_DIRECTIONS[(startDirection + 3) % 6]!;
+    current = { q: current.q + inward[0], r: current.r + inward[1] };
+    radius -= 1;
+  }
+
+  path.push(current);
+  return path;
+}
+
 function isValidNumberPlacement(
   coordinates: readonly AxialCoordinate[],
   numberByHex: ReadonlyMap<string, number>,
@@ -74,13 +102,17 @@ function isValidNumberPlacement(
   for (const coordinate of coordinates) {
     const id = `h-${coordinate.q}-${coordinate.r}`;
     const number = numberByHex.get(id);
-    if (number !== 6 && number !== 8) continue;
+    if (number === undefined) continue;
 
     for (const [dq, dr] of AXIAL_DIRECTIONS) {
       const neighborNumber = numberByHex.get(
         `h-${coordinate.q + dq}-${coordinate.r + dr}`,
       );
-      if (neighborNumber === 6 || neighborNumber === 8) return false;
+      if (neighborNumber === undefined) continue;
+      if (number === neighborNumber) return false;
+      if ((number === 6 || number === 8) && (neighborNumber === 6 || neighborNumber === 8)) {
+        return false;
+      }
     }
   }
   return true;
@@ -88,14 +120,19 @@ function isValidNumberPlacement(
 
 function placeNumberTokens(
   coordinates: readonly AxialCoordinate[],
-  nonDesertHexIds: readonly string[],
+  desertHexId: string,
   random: RandomSource,
 ): Map<string, number> {
-  for (let attempt = 0; attempt < 10_000; attempt += 1) {
-    const tokens = random.shuffle(STANDARD_NUMBER_TOKENS);
+  const start = random.nextInt(6);
+  for (let offset = 0; offset < 6; offset += 1) {
+    const path = buildNumberSpiral((start + offset) % 6);
     const numberByHex = new Map<string, number>();
-    for (let index = 0; index < nonDesertHexIds.length; index += 1) {
-      numberByHex.set(nonDesertHexIds[index]!, tokens[index]!);
+    let tokenIndex = 0;
+    for (const coordinate of path) {
+      const id = `h-${coordinate.q}-${coordinate.r}`;
+      if (id === desertHexId) continue;
+      numberByHex.set(id, OFFICIAL_NUMBER_SEQUENCE[tokenIndex]!);
+      tokenIndex += 1;
     }
     if (isValidNumberPlacement(coordinates, numberByHex)) return numberByHex;
   }
@@ -292,10 +329,9 @@ export function generateBoardWithRandom(random: RandomSource): Board {
     r: coordinate.r,
     terrain: terrains[index]!,
   }));
-  const nonDesertHexIds = hexDrafts
-    .filter((hex) => hex.terrain !== "desert")
-    .map((hex) => hex.id);
-  const numberByHex = placeNumberTokens(coordinates, nonDesertHexIds, random);
+  const desert = hexDrafts.find((hex) => hex.terrain === "desert");
+  if (!desert) throw new Error("El tablero generado no tiene desierto.");
+  const numberByHex = placeNumberTokens(coordinates, desert.id, random);
 
   const hexes: Hex[] = hexDrafts.map((hex) => ({
     ...hex,

@@ -21,14 +21,11 @@ describe("cartas de desarrollo", () => {
     ]);
     expect(next.players[0]!.resources).toEqual(bundle());
 
-    const targetHex = next.board.hexes.find((hex) => hex.id !== next.robberHexId)!;
     expect(() =>
       applyAction(next, {
         type: "play-knight",
         playerId: "p1",
         cardId: "knight-test",
-        hexId: targetHex.id,
-        victimId: null,
       }),
     ).toThrow(/comprada este turno/i);
   });
@@ -103,17 +100,24 @@ describe("cartas de desarrollo", () => {
     state.players[1]!.settlements = [victimVertex.id];
     state.players[1]!.resources = bundle({ brick: 2 });
 
-    const next = applyAction(state, {
+    const played = applyAction(state, {
       type: "play-knight",
       playerId: "p1",
       cardId: "knight-3",
+    });
+    expect(played.phase).toBe("robber");
+    expect(played.players[0]!.playedKnights).toBe(3);
+    expect(played.largestArmyHolderId).toBe("p1");
+    expect(getPublicVictoryPoints(played, "p1")).toBe(2);
+
+    const next = applyAction(played, {
+      type: "move-robber",
+      playerId: "p1",
       hexId: targetHex.id,
       victimId: "p2",
     });
     expect(next.robberHexId).toBe(targetHex.id);
-    expect(next.players[0]!.playedKnights).toBe(3);
-    expect(next.largestArmyHolderId).toBe("p1");
-    expect(getPublicVictoryPoints(next, "p1")).toBe(2);
+    expect(next.phase).toBe("main");
     expect(totalResources(next.players[0]!.resources)).toBe(1);
     expect(totalResources(next.players[1]!.resources)).toBe(1);
   });

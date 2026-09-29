@@ -37,6 +37,7 @@ export interface RoomSnapshot {
   players: RoomPlayer[];
   turnTimeLimitSeconds: number;
   turnDeadlineAt: number | null;
+  tradeRespondDeadlineAt: number | null;
   turnStats: Record<string, TurnStat>;
   game: PlayerGameView | null;
   legal: LegalPlacements;

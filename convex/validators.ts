@@ -26,16 +26,12 @@ export const gameActionValidator = v.union(
     hexId: v.string(),
     victimId: v.union(v.string(), v.null()),
   }),
+  v.object({ type: v.literal("choose-robber-victim"), victimId: v.string() }),
   v.object({ type: v.literal("build-road"), edgeId: v.string() }),
   v.object({ type: v.literal("build-settlement"), vertexId: v.string() }),
   v.object({ type: v.literal("build-city"), vertexId: v.string() }),
   v.object({ type: v.literal("buy-development-card") }),
-  v.object({
-    type: v.literal("play-knight"),
-    cardId: v.string(),
-    hexId: v.string(),
-    victimId: v.union(v.string(), v.null()),
-  }),
+  v.object({ type: v.literal("play-knight"), cardId: v.string() }),
   v.object({ type: v.literal("play-monopoly"), cardId: v.string(), resource: resourceValidator }),
   v.object({
     type: v.literal("play-year-of-plenty"),

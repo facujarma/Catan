@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { PlayerGameView, Resource, ResourceBundle, TradeOffer } from "@catan/engine";
 import { RESOURCE_CARD_FILES } from "../assets";
@@ -85,6 +85,7 @@ interface TradeComposerProps {
   game: PlayerGameView;
   busy: boolean;
   counter?: boolean;
+  tradeRatios: Record<Resource, number>;
   onClose: () => void;
   onAction: (action: GameActionPayload) => Promise<void>;
 }
@@ -93,12 +94,14 @@ export function TradeComposer({
   game,
   busy,
   counter = false,
+  tradeRatios,
   onClose,
   onAction,
 }: TradeComposerProps) {
   const [give, setGive] = useState<ResourceBundle>(emptyBundle);
   const [want, setWant] = useState<ResourceBundle>(emptyBundle);
   const myResources = game.self.resources;
+  const ownedResources = RESOURCES.filter((resource) => myResources[resource] > 0);
 
   const adjust = (side: "give" | "want", resource: Resource, delta: number) => {
     const setter = side === "give" ? setGive : setWant;
@@ -109,8 +112,46 @@ export function TradeComposer({
     });
   };
 
-  const submit = () => {
-    if (busy || bundleTotal(give) === 0 || bundleTotal(want) === 0) return;
+  const giveResources = RESOURCES.filter((resource) => give[resource] > 0);
+  const wantResources = RESOURCES.filter((resource) => want[resource] > 0);
+  const bankGive = giveResources.length === 1 ? giveResources[0]! : null;
+  const bankWant = wantResources.length === 1 ? wantResources[0]! : null;
+  const bankRatio = bankGive ? tradeRatios[bankGive] : 4;
+  const wantedAmount = bankGive && bankWant ? give[bankGive] / bankRatio : null;
+  const bankValid =
+    !counter &&
+    bankGive !== null &&
+    bankWant !== null &&
+    bankGive !== bankWant &&
+    give[bankGive] % bankRatio === 0 &&
+    want[bankWant] === wantedAmount &&
+    game.bank[bankWant] >= want[bankWant];
+  const canOffer = bundleTotal(give) > 0 && bundleTotal(want) > 0;
+
+  const bankHint = (() => {
+    if (counter) return null;
+    if (!bankGive) return "Con el banco se cambia un solo tipo de recurso a la vez.";
+    if (!bankWant) {
+      return `Tasa ${bankRatio}:1 para ${RESOURCE_NAMES[bankGive].toLowerCase()}. Elegí qué querés recibir.`;
+    }
+    if (bankGive === bankWant) return "Elegí un recurso distinto para recibir.";
+    return `Tasa ${bankRatio}:1 · ${give[bankGive]} ${RESOURCE_NAMES[bankGive].toLowerCase()} → ${
+      wantedAmount !== null && Number.isInteger(wantedAmount) ? wantedAmount : "ajustá la cantidad"
+    }${wantedAmount !== null && Number.isInteger(wantedAmount) ? ` ${RESOURCE_NAMES[bankWant].toLowerCase()}` : ""}.`;
+  })();
+
+  const submitBank = () => {
+    if (!bankValid || busy || bankGive === null || bankWant === null) return;
+    void onAction({
+      type: "maritime-trade",
+      giveResource: bankGive,
+      giveAmount: give[bankGive],
+      receiveResource: bankWant,
+    }).then(onClose);
+  };
+
+  const submitOffer = () => {
+    if (!canOffer || busy) return;
     void onAction(
       counter
         ? { type: "counter-offer", give, want }
@@ -130,13 +171,13 @@ export function TradeComposer({
         <div className="flex items-start justify-between gap-2.5">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a4844f]">
-              Comercio entre jugadores
+              {counter ? "Comercio entre jugadores" : "Comercio"}
             </p>
             <h2
               id="trade-composer-title"
-              className="mt-1 text-[22px] font-black text-[#2c3c30]"
+              className="mt-1 font-display text-[22px] font-black text-[#4a2c12]"
             >
-              {counter ? "Contraoferta" : "Nueva oferta"}
+              {counter ? "Contraoferta" : "Cambiar cartas"}
             </h2>
           </div>
           <button
@@ -148,16 +189,18 @@ export function TradeComposer({
             ×
           </button>
         </div>
-        <p className="mt-2 text-xs leading-[1.5] text-ink-soft">
+        <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
           {counter
             ? "Tu contraoferta reemplaza la oferta actual y queda visible para toda la mesa."
-            : "La oferta es global: todos la ven, los que quieran aceptan, y vos elegís con quién cerrar."}
+            : "Entregá las cartas que tenés: podés cambiarlas con el banco si la tasa da exacta, o proponer el intercambio a la mesa."}
         </p>
 
         <div className="mt-3.5 grid grid-cols-1 items-center gap-2 min-[560px]:grid-cols-[1fr_26px_1fr]">
           <TradeSide
             label="Entregás"
             bundle={give}
+            resources={ownedResources}
+            emptyText="No tenés cartas para ofrecer."
             max={myResources}
             onAdjust={(resource, delta) => adjust("give", resource, delta)}
           />
@@ -165,23 +208,40 @@ export function TradeComposer({
             ⇄
           </div>
           <TradeSide
-            label="Pedís"
+            label="Recibís"
             bundle={want}
+            resources={RESOURCES}
             onAdjust={(resource, delta) => adjust("want", resource, delta)}
           />
         </div>
+
+        {bankHint !== null && (
+          <p className="mt-3 rounded-xl border-2 border-dashed border-[#e3cfa5] bg-[#fffaf0] px-3 py-2 text-[11px] font-semibold text-[#8a6a3a]">
+            {bankHint}
+          </p>
+        )}
 
         <div className={MODAL_ACTIONS}>
           <button className={CG_BUTTON_NEUTRAL} type="button" onClick={onClose} disabled={busy}>
             Cancelar
           </button>
+          {!counter && (
+            <button
+              className={CG_BUTTON_ACCEPT}
+              type="button"
+              disabled={busy || !bankValid}
+              onClick={submitBank}
+            >
+              Cambiar con el banco
+            </button>
+          )}
           <button
             className={CG_BUTTON_ACCEPT}
             type="button"
-            disabled={busy || bundleTotal(give) === 0 || bundleTotal(want) === 0}
-            onClick={submit}
+            disabled={busy || !canOffer}
+            onClick={submitOffer}
           >
-            {counter ? "Enviar contraoferta" : "Ofrecer a todos"}
+            {counter ? "Enviar contraoferta" : "Ofrecer a la mesa"}
           </button>
         </div>
       </section>
@@ -192,11 +252,15 @@ export function TradeComposer({
 function TradeSide({
   label,
   bundle,
+  resources,
+  emptyText,
   max,
   onAdjust,
 }: {
   label: string;
   bundle: ResourceBundle;
+  resources: readonly Resource[];
+  emptyText?: string;
   max?: ResourceBundle;
   onAdjust: (resource: Resource, delta: number) => void;
 }) {
@@ -205,8 +269,13 @@ function TradeSide({
       <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-ink-soft">
         {label}
       </span>
-      <div className="flex flex-wrap gap-[7px]">
-        {RESOURCES.map((resource) => {
+      {resources.length === 0 && emptyText ? (
+        <p className="rounded-xl border-2 border-dashed border-[#e3cfa5] px-3 py-3 text-center text-[11px] font-semibold text-[#b08a4a]">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-[7px]">
+        {resources.map((resource) => {
           const available = max?.[resource];
           return (
             <div key={resource} className="flex flex-col items-center gap-1">
@@ -255,8 +324,26 @@ function TradeSide({
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ResponseCountdown({ deadlineAt }: { deadlineAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [deadlineAt]);
+
+  const remainingMs = Math.max(0, deadlineAt - now);
+  if (remainingMs === 0) return null;
+  return (
+    <small className="ml-auto rounded-full bg-[#ffe9b8] px-2 py-[2px] text-[10px] font-extrabold text-[#7a5320]">
+      Respondés en {Math.ceil(remainingMs / 1000)} s
+    </small>
   );
 }
 
@@ -264,6 +351,7 @@ interface TradeOfferPanelProps {
   game: PlayerGameView;
   selfPlayerId: string;
   busy: boolean;
+  respondDeadlineAt: number | null;
   onAction: (action: GameActionPayload) => Promise<void>;
   onCounter: () => void;
 }
@@ -272,6 +360,7 @@ export function TradeOfferPanel({
   game,
   selfPlayerId,
   busy,
+  respondDeadlineAt,
   onAction,
   onCounter,
 }: TradeOfferPanelProps) {
@@ -303,9 +392,13 @@ export function TradeOfferPanel({
         <strong className="text-[13px] text-[#3b352a]">
           {isOfferer ? "Tu oferta a la mesa" : `${offerer?.name} ofrece a la mesa`}
         </strong>
-        <small className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-ink-soft">
-          En vivo
-        </small>
+        {!isOfferer && respondDeadlineAt !== null ? (
+          <ResponseCountdown deadlineAt={respondDeadlineAt} />
+        ) : (
+          <small className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-ink-soft">
+            {isOfferer ? "Elegí a quién aceptar" : "En vivo"}
+          </small>
+        )}
       </header>
 
       <div className="flex flex-col items-center justify-center gap-3 px-3 py-2.5 min-[560px]:flex-row">

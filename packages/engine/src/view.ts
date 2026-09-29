@@ -29,6 +29,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
       })),
     },
     bank: { ...state.bank },
+    developmentDeckCount: state.developmentDeck.length,
     phase: state.phase,
     turnNumber: state.turnNumber,
     playedDevelopmentCardThisTurn: state.playedDevelopmentCardThisTurn,
@@ -59,6 +60,12 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
       pendingDiscardCount: state.pendingDiscards[viewerId] ?? 0,
     },
     robberHexId: state.robberHexId,
+    pendingRobberVictim: state.pendingRobberVictim
+      ? {
+          hexId: state.pendingRobberVictim.hexId,
+          victimIds: [...state.pendingRobberVictim.victimIds],
+        }
+      : null,
     lastRoll: state.lastRoll
       ? { dice: [...state.lastRoll.dice] as [number, number], total: state.lastRoll.total }
       : null,
