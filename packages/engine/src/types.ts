@@ -76,6 +76,7 @@ export interface PlayerState {
   color: string;
   resources: ResourceBundle;
   developmentCards: HeldDevelopmentCard[];
+  boughtDevelopmentCards: DevelopmentCardType[];
   roads: string[];
   settlements: string[];
   cities: string[];
@@ -131,9 +132,25 @@ export interface GameState {
   largestArmyHolderId: string | null;
   playedDevelopmentCardThisTurn: boolean;
   lastRoll: DiceRoll | null;
+  rollHistory: number[];
   winnerId: string | null;
   rngState: number;
   nextTradeId: number;
+}
+
+export interface RollStat {
+  total: number;
+  count: number;
+}
+
+export interface DevelopmentCardStat {
+  type: DevelopmentCardType;
+  count: number;
+}
+
+export interface GameStats {
+  rollCounts: RollStat[];
+  developmentCardsBought: Record<string, DevelopmentCardStat[]>;
 }
 
 export interface CreateGameOptions {
@@ -214,6 +231,7 @@ export interface PlayerPublicView {
   settlementsBuilt: number;
   citiesBuilt: number;
   playedKnights: number;
+  longestRoadLength: number;
   publicVictoryPoints: number;
   isCurrentPlayer: boolean;
 }
@@ -244,4 +262,5 @@ export interface PlayerGameView {
   longestRoadHolderId: string | null;
   largestArmyHolderId: string | null;
   winnerId: string | null;
+  stats: GameStats | null;
 }

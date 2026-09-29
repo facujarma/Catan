@@ -32,7 +32,7 @@ import {
   type Vertex,
 } from "./types";
 
-const PLAYER_COLORS = ["#d94b3d", "#3c78c5", "#e2b83f", "#8457a5"];
+const PLAYER_COLORS = ["#d94b3d", "#3c78c5", "#3f4249", "#8457a5"];
 const MAX_ROADS = 15;
 const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
@@ -117,6 +117,7 @@ export function createGame(options: CreateGameOptions): GameState {
     color: config.color ?? PLAYER_COLORS[index]!,
     resources: emptyResources(),
     developmentCards: [],
+    boughtDevelopmentCards: [],
     roads: [],
     settlements: [],
     cities: [],
@@ -144,6 +145,7 @@ export function createGame(options: CreateGameOptions): GameState {
     largestArmyHolderId: null,
     playedDevelopmentCardThisTurn: false,
     lastRoll: null,
+    rollHistory: [],
     winnerId: null,
     rngState: random.state,
     nextTradeId: 1,
@@ -182,6 +184,7 @@ function cloneGameState(state: GameState): GameState {
       ...player,
       resources: { ...player.resources },
       developmentCards: player.developmentCards.map((card) => ({ ...card })),
+      boughtDevelopmentCards: [...player.boughtDevelopmentCards],
       roads: [...player.roads],
       settlements: [...player.settlements],
       cities: [...player.cities],
@@ -207,6 +210,7 @@ function cloneGameState(state: GameState): GameState {
     lastRoll: state.lastRoll
       ? { dice: [...state.lastRoll.dice] as [number, number], total: state.lastRoll.total }
       : null,
+    rollHistory: [...state.rollHistory],
   };
 }
 
@@ -773,6 +777,7 @@ function rollDice(state: GameState, playerId: string, random: SeededRandom): voi
   const dice: [number, number] = [random.nextInt(6) + 1, random.nextInt(6) + 1];
   const total = dice[0] + dice[1];
   state.lastRoll = { dice, total };
+  state.rollHistory.push(total);
   state.hasRolled = true;
 
   if (total !== 7) {
@@ -846,6 +851,7 @@ function buyDevelopmentCard(state: GameState, playerId: string): void {
   spendResources(state, player, "development-card");
   const card = state.developmentDeck.shift()!;
   player.developmentCards.push({ ...card, boughtOnTurn: state.turnNumber });
+  player.boughtDevelopmentCards.push(card.type);
 }
 
 function playKnight(state: GameState, playerId: string, cardId: string): void {

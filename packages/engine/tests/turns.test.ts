@@ -126,6 +126,13 @@ describe("dados, producción y ladrón", () => {
     ).toThrow(/no podés descartar/i);
   });
 
+  it("registra el historial de tiradas para las estadísticas", () => {
+    const initial = findSeedForRoll(3);
+    expect(initial.rollHistory).toEqual([]);
+    const rolled = applyAction(initial, { type: "roll", playerId: "p1" });
+    expect(rolled.rollHistory).toEqual([3]);
+  });
+
   it("pide elegir víctima cuando hay más de un rival con cartas junto al ladrón", () => {
     const state = mainState(321);
     const hex = state.board.hexes.find((candidate) => candidate.id !== state.robberHexId)!;

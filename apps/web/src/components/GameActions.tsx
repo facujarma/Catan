@@ -150,7 +150,7 @@ function ActionButton({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-1 py-1 transition ${tone} ${
+      className={`relative flex h-[44px] w-[60px] shrink-0 flex-col items-center justify-center gap-0 rounded-xl border-2 px-0.5 transition ${tone} ${
         disabled
           ? "cursor-not-allowed opacity-55 saturate-50"
           : "enabled:hover:brightness-105 enabled:active:translate-y-0.5"
@@ -200,7 +200,7 @@ export default function GameActions({
   );
   const isPlayableTurn = isMyTurn && (game.phase === "main" || game.phase === "awaiting-roll");
   const readyToRoll = isMyTurn && game.phase === "awaiting-roll";
-  const selfColor = selfPlayer?.color ?? "#e2b83f";
+  const selfColor = selfPlayer?.color ?? "#3f4249";
 
   const toggleHandHidden = () => {
     setHandHidden((current) => {
@@ -255,7 +255,6 @@ export default function GameActions({
         <section className="flex min-w-0 flex-col justify-center gap-1" aria-label="Tu mano">
           <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#a08a5e]">
             <Layers size={13} />
-            Tu mano
             <button
               type="button"
               className="ml-auto inline-flex items-center gap-1 rounded-lg border-2 border-[#c9a86a] bg-[#fdf6e3] px-1.5 py-0.5 text-[9px] font-extrabold text-[#7a5320] transition enabled:hover:brightness-105"
@@ -281,7 +280,7 @@ export default function GameActions({
           ) : (
             <>
               <div className="flex flex-wrap items-end gap-1.5">
-                {ownedResources.length === 0 ? (
+                {ownedResources.length === 0 && game.self.developmentCards.length === 0 ? (
                   <span className="text-[11px] font-semibold text-[#b08a4a]">Sin cartas</span>
                 ) : (
                   ownedResources.map((resource) => (
@@ -293,50 +292,46 @@ export default function GameActions({
                     />
                   ))
                 )}
+                {game.self.developmentCards.map((card) => {
+                  const playable = isCardPlayable(card);
+                  const selected = selectedCard?.id === card.id;
+                  return (
+                    <span
+                      key={card.id}
+                      className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
+                        selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
+                      }`}
+                    >
+                      <img
+                        className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                        src={DEV_CARD_FILES[card.type]}
+                        alt={CARD_NAMES[card.type]}
+                        title={CARD_NAMES[card.type]}
+                        draggable={false}
+                      />
+                      {card.type === "victory-point" ? (
+                        <span
+                          className="pr-1 text-[9px] font-bold text-[#8a6a3a]"
+                          title="Solo vos podés verla; cuenta +1 punto"
+                        >
+                          Secreta · +1 PV
+                        </span>
+                      ) : card.boughtOnTurn >= game.turnNumber ? (
+                        <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
+                      ) : (
+                        <button
+                          className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={!playable || busy}
+                          onClick={() => onSelectedCard(card)}
+                        >
+                          Jugar
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
-              {game.self.developmentCards.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1">
-                  {game.self.developmentCards.map((card) => {
-                    const playable = isCardPlayable(card);
-                    const selected = selectedCard?.id === card.id;
-                    return (
-                      <span
-                        key={card.id}
-                        className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
-                          selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
-                        }`}
-                      >
-                        <img
-                          className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
-                          src={DEV_CARD_FILES[card.type]}
-                          alt={CARD_NAMES[card.type]}
-                          title={CARD_NAMES[card.type]}
-                          draggable={false}
-                        />
-                        {card.type === "victory-point" ? (
-                          <span
-                            className="pr-1 text-[9px] font-bold text-[#8a6a3a]"
-                            title="Solo vos podés verla; cuenta +1 punto"
-                          >
-                            Secreta · +1 PV
-                          </span>
-                        ) : card.boughtOnTurn >= game.turnNumber ? (
-                          <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
-                        ) : (
-                          <button
-                            className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
-                            type="button"
-                            disabled={!playable || busy}
-                            onClick={() => onSelectedCard(card)}
-                          >
-                            Jugar
-                          </button>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
             </>
           )}
         </section>
@@ -390,11 +385,11 @@ export default function GameActions({
         </section>
 
         <section
-          className="grid grid-cols-3 justify-end gap-1.5 max-[1180px]:gap-1 max-[940px]:grid-cols-3 max-[940px]:justify-stretch"
+          className="flex flex-wrap items-center justify-end gap-1 max-[940px]:justify-stretch"
           aria-label="Acciones"
         >
           <ActionButton
-            icon={<Handshake size={17} />}
+            icon={<Handshake size={16} />}
             label="Comercio"
             title="Cambiar cartas con el banco o proponer un intercambio a la mesa"
             disabled={busy || !isMainTurn}
@@ -430,7 +425,7 @@ export default function GameActions({
           <ActionButton
             icon={
               <img
-                className="h-6 w-auto"
+                className="h-8 w-auto"
                 src={pieceFile("settlement", selfColor)}
                 alt=""
                 draggable={false}
@@ -460,7 +455,7 @@ export default function GameActions({
             onClick={() => toggleMode("city")}
           />
           <ActionButton
-            icon={<Hourglass size={17} />}
+            icon={<Hourglass size={16} />}
             label="Terminar"
             title="Terminar el turno"
             primary

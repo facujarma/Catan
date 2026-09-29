@@ -6,6 +6,7 @@ const pieces = ["road", "settlement", "city"] as const;
 const players: Record<string, string> = {
   red: "#d94b3d",
   blue: "#3c78c5",
+  black: "#3f4249",
   yellow: "#e2b83f",
   purple: "#8457a5",
 };

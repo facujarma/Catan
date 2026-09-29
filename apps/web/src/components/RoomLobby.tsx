@@ -90,12 +90,6 @@ export default function RoomLobby({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className={EYEBROW}>Tiempo por turno</p>
-            <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#a08a5e]">
-              El dado se tira solo a los 5 s. El ladrón y el robo tienen 20 s cada uno; comerciar,
-              15 s para elegir socio y 5 s para responder. La colocación inicial tiene 2 min por
-              poblado y 20 s por camino. El resto del turno usa este límite y se pausa mientras
-              resolvés un ladrón o un comercio.
-            </p>
           </div>
           {me?.isHost ? (
             <select
@@ -120,9 +114,6 @@ export default function RoomLobby({
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t-2 border-dashed border-[#e3cfa5] pt-4">
           <div>
             <p className={EYEBROW}>Bots de prueba</p>
-            <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#a08a5e]">
-              Esperan 5 segundos, tiran si les toca y pasan el turno. Descartan al azar.
-            </p>
           </div>
           <button
             type="button"

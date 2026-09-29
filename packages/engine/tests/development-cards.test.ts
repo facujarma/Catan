@@ -19,6 +19,7 @@ describe("cartas de desarrollo", () => {
     expect(next.players[0]!.developmentCards).toEqual([
       { id: "knight-test", type: "knight", boughtOnTurn: 3 },
     ]);
+    expect(next.players[0]!.boughtDevelopmentCards).toEqual(["knight"]);
     expect(next.players[0]!.resources).toEqual(bundle());
 
     expect(() =>

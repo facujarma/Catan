@@ -15,6 +15,9 @@ describe("puntuación", () => {
     state.players[0]!.roads = path.edgeIds;
 
     expect(calculateLongestRoad(state, "p1")).toBe(5);
+    expect(
+      getPlayerView(state, "p1").players.find((player) => player.id === "p1")?.longestRoadLength,
+    ).toBe(5);
     recalculateAwards(state);
     expect(state.longestRoadHolderId).toBe("p1");
     expect(getPublicVictoryPoints(state, "p1")).toBe(2);
@@ -39,6 +42,32 @@ describe("puntuación", () => {
     state.players[1]!.playedKnights = 4;
     recalculateAwards(state);
     expect(state.largestArmyHolderId).toBe("p2");
+  });
+
+  it("acumula estadísticas de tiradas y cartas compradas y las expone al terminar", () => {
+    const state = mainState();
+    expect(getPlayerView(state, "p1").stats).toBeNull();
+
+    state.players[0]!.boughtDevelopmentCards = ["knight", "knight", "victory-point"];
+    state.players[1]!.boughtDevelopmentCards = ["monopoly"];
+    state.rollHistory = [3, 7, 3, 11, 7, 12];
+    state.phase = "finished";
+    state.winnerId = "p1";
+
+    const view = getPlayerView(state, "p1");
+    expect(view.stats).not.toBeNull();
+    const countFor = (total: number) =>
+      view.stats!.rollCounts.find((entry) => entry.total === total)?.count;
+    expect(countFor(3)).toBe(2);
+    expect(countFor(7)).toBe(2);
+    expect(countFor(12)).toBe(1);
+    expect(countFor(5)).toBe(0);
+    expect(view.stats!.developmentCardsBought["p1"]).toEqual([
+      { type: "knight", count: 2 },
+      { type: "victory-point", count: 1 },
+    ]);
+    expect(view.stats!.developmentCardsBought["p2"]).toEqual([{ type: "monopoly", count: 1 }]);
+    expect(view.stats!.developmentCardsBought["p3"]).toEqual([]);
   });
 
   it("suma puntos ocultos solo para el dueño y filtra la vista por jugador", () => {

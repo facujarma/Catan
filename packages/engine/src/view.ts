@@ -1,6 +1,32 @@
-import { getCurrentPlayerId, getPublicVictoryPoints, getVictoryPoints } from "./scoring";
+import {
+  calculateLongestRoad,
+  getCurrentPlayerId,
+  getPublicVictoryPoints,
+  getVictoryPoints,
+} from "./scoring";
 import { totalResources } from "./resources";
-import type { GameState, PlayerGameView } from "./types";
+import { DEVELOPMENT_CARD_TYPES } from "./types";
+import type { DevelopmentCardStat, GameState, GameStats, PlayerGameView } from "./types";
+
+function buildGameStats(state: GameState): GameStats {
+  const rollCounts = [];
+  for (let total = 2; total <= 12; total += 1) {
+    rollCounts.push({
+      total,
+      count: state.rollHistory.filter((roll) => roll === total).length,
+    });
+  }
+
+  const developmentCardsBought: Record<string, DevelopmentCardStat[]> = {};
+  for (const player of state.players) {
+    developmentCardsBought[player.id] = DEVELOPMENT_CARD_TYPES.map((type) => ({
+      type,
+      count: player.boughtDevelopmentCards.filter((cardType) => cardType === type).length,
+    })).filter((stat) => stat.count > 0);
+  }
+
+  return { rollCounts, developmentCardsBought };
+}
 
 export function getPlayerView(state: GameState, viewerId: string): PlayerGameView {
   const viewer = state.players.find((player) => player.id === viewerId);
@@ -48,6 +74,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
       settlementsBuilt: player.settlements.length,
       citiesBuilt: player.cities.length,
       playedKnights: player.playedKnights,
+      longestRoadLength: calculateLongestRoad(state, player.id),
       publicVictoryPoints: getPublicVictoryPoints(state, player.id),
       isCurrentPlayer: player.id === getCurrentPlayerId(state),
     })),
@@ -82,5 +109,6 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
     longestRoadHolderId: state.longestRoadHolderId,
     largestArmyHolderId: state.largestArmyHolderId,
     winnerId: state.winnerId,
+    stats: state.phase === "finished" ? buildGameStats(state) : null,
   };
 }

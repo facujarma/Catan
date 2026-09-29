@@ -39,8 +39,9 @@ export const TILE_FRAME_FILE = "/colonist/tiles/frame.svg";
 const PIECE_COLOR_FOLDERS: Record<string, string> = {
   "#d94b3d": "red",
   "#3c78c5": "blue",
-  "#e2b83f": "yellow",
+  "#3f4249": "black",
   "#8457a5": "purple",
+  "#e2b83f": "yellow",
 };
 
 export function pieceFile(kind: "road" | "settlement" | "city", color: string): string {

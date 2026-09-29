@@ -10,6 +10,7 @@ import type {
 import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
+import GameStats from "./GameStats";
 import { Crown, Landmark, LogOut, Settings, UserPlus } from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
 import {
@@ -35,7 +36,6 @@ interface GameRoomProps {
   messages: ChatMessage[];
   events: GameEvent[];
   busy: boolean;
-  demo?: boolean;
   onAction: (action: GameActionPayload) => Promise<void>;
   onSendMessage: (body: string) => Promise<void>;
   onRequestPause: (mode: "pause" | "resume") => Promise<void>;
@@ -55,7 +55,6 @@ export default function GameRoom({
   messages,
   events,
   busy,
-  demo = false,
   onAction,
   onSendMessage,
   onRequestPause,
@@ -65,9 +64,10 @@ export default function GameRoom({
   onCopyInvite,
 }: GameRoomProps) {
   const game = room.game!;
-  const paused = !demo && room.pausedAt !== null;
+  const paused = room.pausedAt !== null;
   const pauseRequest = room.pauseRequest;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [mode, setMode] = useState<BoardMode>(null);
   const [selectedCard, setSelectedCard] = useState<HeldDevelopmentCard | null>(null);
   const [selectedRoadIds, setSelectedRoadIds] = useState<string[]>([]);
@@ -188,13 +188,12 @@ export default function GameRoom({
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (demo || room.turnDeadlineAt === null) return;
+    if (room.turnDeadlineAt === null) return;
     const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
-  }, [demo, room.turnDeadlineAt]);
+  }, [room.turnDeadlineAt]);
   const remainingMs = room.turnDeadlineAt !== null ? Math.max(0, room.turnDeadlineAt - now) : null;
   const alarmActive =
-    !demo &&
     isMyTurn &&
     game.phase !== "finished" &&
     game.phase !== "awaiting-roll" &&
@@ -213,7 +212,7 @@ export default function GameRoom({
     previousCountsRef.current = counts;
 
     const roll = game.lastRoll;
-    if (demo || !roll || roll.total === 7 || !previousCounts) return;
+    if (!roll || roll.total === 7 || !previousCounts) return;
 
     const produced = computeProduction(game, roll.total);
     const gainedByPlayer: Record<string, number> = {};
@@ -259,7 +258,7 @@ export default function GameRoom({
     const total = 1_000 + Math.max(...flights.map((flight) => flight.delay));
     const timer = window.setTimeout(() => setFlyingCards([]), total);
     return () => window.clearTimeout(timer);
-  }, [demo, game.players, game.lastRoll]);
+  }, [game.players, game.lastRoll]);
 
   useEffect(() => {
     if (!paused) return;
@@ -269,6 +268,47 @@ export default function GameRoom({
     setPlentyResources([]);
     setTradeComposer(null);
   }, [paused]);
+
+  const [awardToast, setAwardToast] = useState<{
+    id: number;
+    kind: "road" | "army";
+    playerName: string;
+    playerColor: string;
+  } | null>(null);
+  const previousAwardsRef = useRef<{ road: string | null; army: string | null }>({
+    road: game.longestRoadHolderId,
+    army: game.largestArmyHolderId,
+  });
+
+  useEffect(() => {
+    const previous = previousAwardsRef.current;
+    previousAwardsRef.current = {
+      road: game.longestRoadHolderId,
+      army: game.largestArmyHolderId,
+    };
+    const armyChanged =
+      game.largestArmyHolderId !== null && game.largestArmyHolderId !== previous.army;
+    const roadChanged =
+      game.longestRoadHolderId !== null && game.longestRoadHolderId !== previous.road;
+    const kind = armyChanged ? "army" : roadChanged ? "road" : null;
+    if (!kind) return;
+
+    const holderId = kind === "army" ? game.largestArmyHolderId : game.longestRoadHolderId;
+    const holder = game.players.find((player) => player.id === holderId);
+    setAwardToast({
+      id: Date.now(),
+      kind,
+      playerName: holder?.name ?? "Un jugador",
+      playerColor: holder?.color ?? "#d94b3d",
+    });
+    const timer = window.setTimeout(() => setAwardToast(null), 4_500);
+    return () => window.clearTimeout(timer);
+  }, [game.longestRoadHolderId, game.largestArmyHolderId, game.players]);
+
+  const selfResourceCount = RESOURCES.reduce(
+    (sum, resource) => sum + game.self.resources[resource],
+    0,
+  );
 
   const hint = (() => {
     if (game.phase === "finished") return null;
@@ -323,7 +363,7 @@ export default function GameRoom({
               ? "Tu turno"
               : `Turno de ${currentIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </span>
-          {!demo && !paused && game.phase !== "finished" && room.turnDeadlineAt !== null && (
+          {!paused && game.phase !== "finished" && room.turnDeadlineAt !== null && (
             <TurnTimer deadlineAt={room.turnDeadlineAt} />
           )}
           {paused && (
@@ -339,21 +379,19 @@ export default function GameRoom({
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          {!demo && (
-            <button
-              className="inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5"
-              type="button"
-              onClick={onCopyInvite}
-            >
-              <UserPlus size={13} /> Invitar
-            </button>
-          )}
+          <button
+            className="inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5"
+            type="button"
+            onClick={onCopyInvite}
+          >
+            <UserPlus size={13} /> Invitar
+          </button>
           <button
             className="inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2.5 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5"
             type="button"
             onClick={onLeave}
           >
-            <LogOut size={13} /> {demo ? "Volver" : "Salir"}
+            <LogOut size={13} /> Salir
           </button>
         </div>
       </header>
@@ -394,9 +432,9 @@ export default function GameRoom({
         >
           <BoardSvg
             game={game}
-            legal={demo ? emptyLegalPlacements : room.legal}
+            legal={room.legal}
             selfPlayerId={room.selfPlayerId}
-            mode={demo ? null : mode}
+            mode={mode}
             selectedRoadIds={selectedRoadIds}
             onVertexClick={handleVertexClick}
             onEdgeClick={handleEdgeClick}
@@ -415,7 +453,7 @@ export default function GameRoom({
             </div>
           )}
 
-          {!demo && !paused && game.phase === "trade" && offer && (
+          {!paused && game.phase === "trade" && offer && (
             <TradeOfferPanel
               game={game}
               selfPlayerId={room.selfPlayerId}
@@ -426,7 +464,7 @@ export default function GameRoom({
             />
           )}
 
-          {!demo && hint && (
+          {hint && (
             <div className="absolute bottom-3 left-1/2 z-30 max-w-[min(560px,calc(100%-24px))] -translate-x-1/2 rounded-2xl border-2 border-[#8a5a1e] bg-[#4a2e1c]/95 px-3.5 py-1.5 text-center text-xs font-semibold text-[#ffe9b8] shadow-[0_4px_0_rgba(30,16,6,0.4)]">
               {hint}
               {selectedCard?.type === "road-building" && (
@@ -463,17 +501,23 @@ export default function GameRoom({
                 <p className="mt-1.5 text-[13px] font-semibold text-[#8a6a3a]">
                   10 puntos de victoria
                 </p>
+                <button
+                  className={`${CG_BUTTON_ACCEPT} mt-3`}
+                    type="button"
+                  onClick={() => setStatsOpen(true)}
+                >
+                  📊 Ver estadísticas
+                </button>
               </div>
             </div>
           )}
         </section>
 
         <aside className="flex min-h-0 flex-col gap-2 overflow-hidden">
-          {!demo && (
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                className={`inline-flex min-h-[30px] items-center gap-1.5 rounded-xl border-2 font-display text-[11px] font-extrabold shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 ${
+                className={`inline-flex min-h-[30px] w-full items-center justify-center gap-1.5 rounded-xl border-2 font-display text-[11px] font-extrabold shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 ${
                   settingsOpen
                     ? "border-[#8a5a1e] bg-[#ffe9b8] text-[#7a5320]"
                     : "border-[#8a5a1e] bg-[#fdf6e3] text-[#7a5320]"
@@ -494,10 +538,9 @@ export default function GameRoom({
                   Votación en curso
                 </span>
               )}
-            </div>
-          )}
+          </div>
 
-          {!demo && settingsOpen && (
+          {settingsOpen && (
             <section
               className="shrink-0 rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] p-2.5 shadow-[0_4px_0_rgba(74,44,18,0.25)]"
               aria-label="Configuración"
@@ -603,7 +646,7 @@ export default function GameRoom({
           <FeedPanel
             messages={messages}
             events={events}
-            disabled={busy || demo}
+            disabled={busy}
             onSend={onSendMessage}
           />
           <section
@@ -642,27 +685,19 @@ export default function GameRoom({
       </main>
 
       <footer className="z-[25] shrink-0 px-2 pb-2">
-        {demo ? (
-          <div className="flex items-center justify-center rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-2.5 py-2 shadow-[0_4px_0_rgba(74,44,18,0.25)]">
-            <p className="max-w-[560px] text-center text-[10px] font-semibold text-[#a08a5e]">
-              Vista de muestra: así se ve una partida con el comercio global y el tablero al estilo Colonist.
-            </p>
-          </div>
-        ) : (
-          <GameActions
-            room={room}
-            mode={mode}
-            selectedCard={selectedCard}
-            busy={busy || paused}
-            onModeChange={setMode}
-            onSelectedCard={selectDevelopmentCard}
-            onAction={onAction}
-            onOpenTrade={() => setTradeComposer("new")}
-          />
-        )}
+        <GameActions
+          room={room}
+          mode={mode}
+          selectedCard={selectedCard}
+          busy={busy || paused}
+          onModeChange={setMode}
+          onSelectedCard={selectDevelopmentCard}
+          onAction={onAction}
+          onOpenTrade={() => setTradeComposer("new")}
+        />
       </footer>
 
-      {!demo && tradeComposer && !paused && (
+      {tradeComposer && !paused && (
         <TradeComposer
           game={game}
           busy={busy}
@@ -673,7 +708,7 @@ export default function GameRoom({
         />
       )}
 
-      {!demo && selectedCard?.type === "monopoly" && (
+      {selectedCard?.type === "monopoly" && (
         <div className={MODAL_BACKDROP} role="presentation">
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="monopoly-title">
             <div className="flex items-start justify-between gap-2.5">
@@ -713,7 +748,7 @@ export default function GameRoom({
         </div>
       )}
 
-      {!demo && selectedCard?.type === "year-of-plenty" && (
+      {selectedCard?.type === "year-of-plenty" && (
         <div className={MODAL_BACKDROP} role="presentation">
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="plenty-title">
             <div className="flex items-start justify-between gap-2.5">
@@ -787,7 +822,7 @@ export default function GameRoom({
         </div>
       )}
 
-      {!demo && pendingVictim && isMyTurn && (
+      {pendingVictim && isMyTurn && (
         <div className={MODAL_BACKDROP} role="presentation">
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="victim-title">
             <div className="flex items-start justify-between gap-2.5">
@@ -822,6 +857,52 @@ export default function GameRoom({
       <span className="sr-only" aria-live="polite">
         {robberTargetName ? `Territorio seleccionado ${robberTargetName}` : ""}
       </span>
+
+      {awardToast && (
+        <div
+          key={awardToast.id}
+          className="pointer-events-none fixed left-1/2 top-14 z-[110] -translate-x-1/2 animate-[toast-pop_0.45s_ease-out] rounded-2xl border-2 border-[#c9a86a] bg-[#f7ecd4] px-4 py-2 text-center shadow-[0_6px_0_rgba(74,44,18,0.35),0_14px_36px_rgba(0,0,0,0.4)]"
+          role="status"
+        >
+          <span className="flex items-center justify-center gap-2">
+            {awardToast.kind === "army" ? (
+              <img className="h-8 w-auto" src={DEV_CARD_FILES.knight} alt="" />
+            ) : (
+              <img
+                className="h-5 w-auto"
+                src={pieceFile("road", awardToast.playerColor)}
+                alt=""
+              />
+            )}
+            <span className="font-display text-sm font-extrabold text-[#4a2c12]">
+              {awardToast.kind === "army" ? "¡Ejército más grande!" : "¡Camino más largo!"}
+            </span>
+          </span>
+          <p className="mt-0.5 text-[11px] font-bold text-[#8a6a3a]">
+            {awardToast.playerName} gana 2 puntos de victoria.
+          </p>
+        </div>
+      )}
+
+      {selfResourceCount >= 8 && (
+        <div className="fixed bottom-3 left-3 z-[70] animate-pulse rounded-2xl border-2 border-[#a4462f] bg-[#f6dcd6] px-3 py-2 shadow-[0_4px_0_rgba(74,44,18,0.25)]">
+          <p className="font-display text-xs font-extrabold text-[#8a3a22]">
+            🖐 Tenés {selfResourceCount} cartas
+          </p>
+          <p className="text-[10px] font-bold text-[#a4462f]">
+            Si sale 7 descartás {Math.floor(selfResourceCount / 2)}
+          </p>
+        </div>
+      )}
+
+      {statsOpen && game.phase === "finished" && (
+        <GameStats
+          game={game}
+          turnStats={room.turnStats}
+          selfPlayerId={room.selfPlayerId}
+          onClose={() => setStatsOpen(false)}
+        />
+      )}
 
       {flyingCards.length > 0 && (
         <div className="pointer-events-none fixed inset-0 z-[80]">
@@ -887,7 +968,7 @@ function PlayerPanel({
       className={`group relative rounded-2xl border-2 px-2.5 py-2 shadow-[0_3px_0_rgba(74,44,18,0.25)] max-[940px]:min-w-[190px] ${tone} ${
         offline ? "opacity-70" : ""
       } ${player.isCurrentPlayer ? "turn-glow" : ""}`}
-      title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail})`}
+      title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail}) · Camino más largo: ${player.longestRoadLength}`}
     >
       {player.isCurrentPlayer && (
         <span
@@ -909,13 +990,29 @@ function PlayerPanel({
               {player.name}
               {self ? " (vos)" : ""}
             </strong>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[12px] font-black text-[#7a5320]">
-              <Crown size={13} />
-              {points}
+            <span className="flex shrink-0 items-center gap-1">
+              {player.isCurrentPlayer && (
+                <span className="animate-pulse rounded-full bg-[#e8b25a] px-1.5 py-px font-display text-[8px] font-black uppercase tracking-[0.06em] text-[#4a2c12] shadow-[0_1px_0_#8a5a1e]">
+                  turno
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded-full border-2 border-[#d9a44a] bg-[#ffe9b8] px-1.5 py-px text-[12px] font-black text-[#7a5320]">
+                <Crown size={13} />
+                {points}
+              </span>
             </span>
           </div>
           <div className="mt-1 flex items-center gap-2.5 text-[13px] font-bold text-[#7a5320]">
-            <span className="inline-flex items-center gap-1" title="Cartas de recurso">
+            <span
+              className={`inline-flex items-center gap-1 ${
+                player.resourceCardCount >= 8 ? "text-[#c92a2a]" : ""
+              }`}
+              title={
+                player.resourceCardCount >= 8
+                  ? "8 o más cartas: si sale un 7 tiene que descartar"
+                  : "Cartas de recurso"
+              }
+            >
               <img className="h-5 w-auto" src={BANK_FILE} alt="" />
               {player.resourceCardCount}
             </span>
@@ -948,13 +1045,13 @@ function PlayerPanel({
       {(longestRoad || largestArmy) && (
         <div className="mt-1 flex flex-wrap gap-1">
           {longestRoad && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]">
+            <span className="inline-flex animate-[award-pop_0.5s_ease-out] items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]">
               <img className="h-3 w-auto" src={pieceFile("road", player.color)} alt="" /> Camino más
-              largo
+              largo · {player.longestRoadLength}
             </span>
           )}
           {largestArmy && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#f6dcd6] px-1.5 py-0.5 text-[9px] font-extrabold text-[#8a3a22]">
+            <span className="inline-flex animate-[award-pop_0.5s_ease-out] items-center gap-1 rounded-full bg-[#f6dcd6] px-1.5 py-0.5 text-[9px] font-extrabold text-[#8a3a22]">
               <img className="h-3.5 w-auto" src={DEV_CARD_FILES.knight} alt="" /> Ejército más
               grande
             </span>
@@ -1033,11 +1130,3 @@ function TurnTimer({ deadlineAt }: { deadlineAt: number }) {
   );
 }
 
-const emptyLegalPlacements = {
-  settlementVertexIds: [] as string[],
-  roadIds: [] as string[],
-  freeRoadIds: [] as string[],
-  cityVertexIds: [] as string[],
-  tradeRatios: { wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4 },
-  robberHexIds: [] as string[],
-};

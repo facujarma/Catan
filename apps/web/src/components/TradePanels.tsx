@@ -215,6 +215,46 @@ export function TradeComposer({
           />
         </div>
 
+        {!counter && bankGive !== null && bankWant !== null && bankGive !== bankWant && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#a08a5e]">
+              Con el banco
+            </span>
+            {[1, 2, 3, 4].map((multiplier) => {
+              const giveAmount = bankRatio * multiplier;
+              const receiveAmount = multiplier;
+              const affordable = myResources[bankGive] >= giveAmount;
+              const bankHas = game.bank[bankWant] >= receiveAmount;
+              const selected = give[bankGive] === giveAmount && want[bankWant] === receiveAmount;
+              return (
+                <button
+                  key={multiplier}
+                  type="button"
+                  disabled={busy || !affordable || !bankHas}
+                  className={`rounded-full border-2 px-2 py-[2px] font-mono text-[10px] font-black transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    selected
+                      ? "border-[#d9a44a] bg-[#ffe9b8] text-[#7a5320]"
+                      : "border-[#c9a86a] bg-[#fdf6e3] text-[#7a5320] enabled:hover:brightness-105"
+                  }`}
+                  title={
+                    affordable && bankHas
+                      ? `Entregar ${giveAmount} y recibir ${receiveAmount}`
+                      : !affordable
+                        ? `Necesitás ${giveAmount} cartas`
+                        : "El banco no tiene suficientes cartas"
+                  }
+                  onClick={() => {
+                    setGive({ ...emptyBundle(), [bankGive]: giveAmount });
+                    setWant({ ...emptyBundle(), [bankWant]: receiveAmount });
+                  }}
+                >
+                  {giveAmount}:{receiveAmount}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {bankHint !== null && (
           <p className="mt-3 rounded-xl border-2 border-dashed border-[#e3cfa5] bg-[#fffaf0] px-3 py-2 text-[11px] font-semibold text-[#8a6a3a]">
             {bankHint}

@@ -4,7 +4,6 @@ import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex
 import { ConvexError } from "convex/values";
 import { api } from "./convexApi";
 import FeedPanel from "./components/FeedPanel";
-import DemoPreview from "./components/DemoPreview";
 import GameRoom from "./components/GameRoom";
 import RoomLobby from "./components/RoomLobby";
 import {
@@ -15,17 +14,12 @@ import {
   saveGuestName,
   saveRoomCode,
 } from "./identity";
-import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD, TABLE_BACKGROUND } from "./ui";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD, TABLE_BACKGROUND } from "./ui";
 import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "./model";
 
 export default function App() {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim();
-  const [preview, setPreview] = useState(false);
-  if (!convexUrl) {
-    return preview
-      ? <DemoPreview onBack={() => setPreview(false)} />
-      : <ConfigurationNotice onPreview={() => setPreview(true)} />;
-  }
+  if (!convexUrl) return <ConfigurationNotice />;
   return <ConnectedApp convexUrl={convexUrl} />;
 }
 
@@ -46,7 +40,6 @@ function CatanApp() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
 
   const room = useQuery(
     api.rooms.getRoom,
@@ -340,8 +333,6 @@ function CatanApp() {
     </div>
   );
 
-  if (showDemo) return <DemoPreview onBack={() => setShowDemo(false)} />;
-
   if (roomCode && room === undefined) {
     return frame(
       <div className={`${CARD} mx-auto max-w-md p-8 text-center font-bold text-[#8a6a3a]`}>
@@ -441,14 +432,11 @@ function CatanApp() {
         </form>
       </section>
 
-      <button className={`${BTN_LINK} mt-5`} type="button" onClick={() => setShowDemo(true)}>
-        Ver una partida de muestra
-      </button>
     </div>,
   );
 }
 
-function ConfigurationNotice({ onPreview }: { onPreview: () => void }) {
+function ConfigurationNotice() {
   return (
     <div className={`grid min-h-screen place-items-center bg-[#4a2e1c] p-6 ${TABLE_BACKGROUND}`}>
       <section className={`${CARD} w-full max-w-md p-7 text-center`}>
@@ -462,9 +450,6 @@ function ConfigurationNotice({ onPreview }: { onPreview: () => void }) {
           <code className="rounded bg-[#efe0bd] px-1">apps/web/.env.local</code> y corré{" "}
           <code className="rounded bg-[#efe0bd] px-1">bun run convex:dev</code>.
         </p>
-        <button className={`${BTN_PRIMARY} mt-5 w-full`} type="button" onClick={onPreview}>
-          Ver una partida de muestra
-        </button>
       </section>
     </div>
   );
