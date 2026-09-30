@@ -2,7 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..", "public", "colonist");
-const pieces = ["road", "settlement", "city"] as const;
+const pieces = ["road", "settlement", "city", "ship"] as const;
+const sourceByPiece: Record<(typeof pieces)[number], string> = {
+  road: "road_gold.svg",
+  settlement: "settlement_gold.svg",
+  city: "city_gold.svg",
+  ship: "ship_north_west.svg",
+};
 const players: Record<string, string> = {
   red: "#d94b3d",
   blue: "#3c78c5",
@@ -62,7 +68,7 @@ for (const [name, player] of Object.entries(players)) {
   const light = shade(player, 0.62);
   mkdirSync(join(root, "pieces", name), { recursive: true });
   for (const piece of pieces) {
-    const svg = readFileSync(join(root, `${piece}_gold.svg`), "utf8");
+    const svg = readFileSync(join(root, sourceByPiece[piece]), "utf8");
     const palette = [...new Set(svg.match(/#[0-9a-fA-F]{6}/g) ?? [])].filter(
       (color) => saturation(color) >= 0.2,
     );

@@ -6,7 +6,13 @@ import {
 } from "./scoring";
 import { totalResources } from "./resources";
 import { DEVELOPMENT_CARD_TYPES } from "./types";
-import type { DevelopmentCardStat, GameState, GameStats, PlayerGameView } from "./types";
+import type {
+  Board,
+  DevelopmentCardStat,
+  GameState,
+  GameStats,
+  PlayerGameView,
+} from "./types";
 
 function buildGameStats(state: GameState): GameStats {
   const rollCounts = [];
@@ -32,28 +38,36 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
   const viewer = state.players.find((player) => player.id === viewerId);
   if (!viewer) throw new Error(`No existe el jugador ${viewerId}.`);
 
+  const board: Board = {
+    hexes: state.board.hexes.map((hex) => ({
+      ...hex,
+      neighborHexIds: [...hex.neighborHexIds],
+    })),
+    vertices: state.board.vertices.map((vertex) => ({
+      ...vertex,
+      hexIds: [...vertex.hexIds],
+      edgeIds: [...vertex.edgeIds],
+      adjacentVertexIds: [...vertex.adjacentVertexIds],
+    })),
+    edges: state.board.edges.map((edge) => ({
+      ...edge,
+      vertexIds: [...edge.vertexIds] as [string, string],
+      hexIds: [...edge.hexIds],
+    })),
+    ports: state.board.ports.map((port) => ({
+      ...port,
+      vertexIds: [...port.vertexIds] as [string, string],
+    })),
+  };
+  if (state.board.regions) {
+    board.regions = state.board.regions.map((region) => ({
+      ...region,
+      hexIds: [...region.hexIds],
+    }));
+  }
+
   return {
-    board: {
-      hexes: state.board.hexes.map((hex) => ({
-        ...hex,
-        neighborHexIds: [...hex.neighborHexIds],
-      })),
-      vertices: state.board.vertices.map((vertex) => ({
-        ...vertex,
-        hexIds: [...vertex.hexIds],
-        edgeIds: [...vertex.edgeIds],
-        adjacentVertexIds: [...vertex.adjacentVertexIds],
-      })),
-      edges: state.board.edges.map((edge) => ({
-        ...edge,
-        vertexIds: [...edge.vertexIds] as [string, string],
-        hexIds: [...edge.hexIds],
-      })),
-      ports: state.board.ports.map((port) => ({
-        ...port,
-        vertexIds: [...port.vertexIds] as [string, string],
-      })),
-    },
+    board,
     bank: { ...state.bank },
     developmentDeckCount: state.developmentDeck.length,
     phase: state.phase,
@@ -68,14 +82,17 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
       resourceCardCount: totalResources(player.resources),
       developmentCardCount: player.developmentCards.length,
       roadIds: [...player.roads],
+      shipIds: [...player.ships],
       settlementVertexIds: [...player.settlements],
       cityVertexIds: [...player.cities],
       roadsBuilt: player.roads.length,
+      shipsBuilt: player.ships.length,
       settlementsBuilt: player.settlements.length,
       citiesBuilt: player.cities.length,
       playedKnights: player.playedKnights,
       longestRoadLength: calculateLongestRoad(state, player.id),
       publicVictoryPoints: getPublicVictoryPoints(state, player.id),
+      bonusVictoryPoints: player.bonusVpTokens.reduce((total, token) => total + token.amount, 0),
       isCurrentPlayer: player.id === getCurrentPlayerId(state),
     })),
     self: {
@@ -86,12 +103,27 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerGameVie
       ).length,
       totalVictoryPoints: getVictoryPoints(state, viewerId),
       pendingDiscardCount: state.pendingDiscards[viewerId] ?? 0,
+      pendingGoldCount: state.pendingGoldChoices[viewerId] ?? 0,
     },
     robberHexId: state.robberHexId,
+    piratePosition: state.piratePosition
+      ? state.piratePosition.kind === "frame"
+        ? { kind: "frame" }
+        : { kind: "hex", hexId: state.piratePosition.hexId }
+      : null,
+    movedShipThisTurn: state.movedShipThisTurn,
+    scenarioId: state.scenarioId,
+    winThreshold: state.winThreshold,
     pendingRobberVictim: state.pendingRobberVictim
       ? {
           hexId: state.pendingRobberVictim.hexId,
           victimIds: [...state.pendingRobberVictim.victimIds],
+        }
+      : null,
+    pendingPirateVictim: state.pendingPirateVictim
+      ? {
+          hexId: state.pendingPirateVictim.hexId,
+          victimIds: [...state.pendingPirateVictim.victimIds],
         }
       : null,
     lastRoll: state.lastRoll

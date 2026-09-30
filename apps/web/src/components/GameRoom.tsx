@@ -71,6 +71,7 @@ export default function GameRoom({
   const [mode, setMode] = useState<BoardMode>(null);
   const [selectedCard, setSelectedCard] = useState<HeldDevelopmentCard | null>(null);
   const [selectedRoadIds, setSelectedRoadIds] = useState<string[]>([]);
+  const [selectedShipId, setSelectedShipId] = useState<string | null>(null);
   const [plentyResources, setPlentyResources] = useState<Resource[]>([]);
   const [tradeComposer, setTradeComposer] = useState<null | "new" | "counter">(null);
 
@@ -80,7 +81,8 @@ export default function GameRoom({
     (player) => player.id === game.currentPlayerId && player.isBot,
   );
   const offer = game.activeTrade;
-  const pendingVictim = game.pendingRobberVictim;
+  const pendingVictim = game.pendingRobberVictim ?? game.pendingPirateVictim;
+  const pirateVictim = game.pendingPirateVictim !== null && game.pendingRobberVictim === null;
   const eligibleVictims = pendingVictim
     ? pendingVictim.victimIds
         .map((victimId) => game.players.find((player) => player.id === victimId))
@@ -91,17 +93,25 @@ export default function GameRoom({
     setMode(null);
     setSelectedCard(null);
     setSelectedRoadIds([]);
+    setSelectedShipId(null);
     setPlentyResources([]);
   };
 
   const handleHexClick = (hexId: string) => {
-    if (paused || game.phase !== "robber" || !isMyTurn) return;
-    void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
+    if (paused || !isMyTurn) return;
+    if (game.phase === "robber") {
+      void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
+    } else if (game.phase === "pirate") {
+      void onAction({ type: "move-pirate", hexId }).then(resetSelection);
+    }
   };
 
   const chooseVictim = (victimId: string) => {
     if (paused) return;
-    void onAction({ type: "choose-robber-victim", victimId }).then(resetSelection);
+    const action = pirateVictim
+      ? ({ type: "choose-pirate-victim", victimId } as const)
+      : ({ type: "choose-robber-victim", victimId } as const);
+    void onAction(action).then(resetSelection);
   };
 
   const handleVertexClick = (vertexId: string) => {
@@ -118,9 +128,24 @@ export default function GameRoom({
   const handleEdgeClick = (edgeId: string) => {
     if (paused || !isMyTurn) return;
     if (game.phase === "setup-road") {
-      void onAction({ type: "place-setup-road", edgeId }).then(resetSelection);
+      const kind = room.legal.shipIds.includes(edgeId) && !room.legal.roadIds.includes(edgeId)
+        ? "ship"
+        : "road";
+      void onAction({ type: "place-setup-road", edgeId, kind }).then(resetSelection);
     } else if (mode === "road") {
       void onAction({ type: "build-road", edgeId }).then(resetSelection);
+    } else if (mode === "ship") {
+      void onAction({ type: "build-ship", edgeId }).then(resetSelection);
+    } else if (mode === "move-ship") {
+      if (room.legal.movableShipIds.includes(edgeId)) {
+        setSelectedShipId((current) => (current === edgeId ? null : edgeId));
+        return;
+      }
+      if (selectedShipId && (room.legal.shipMoveTargets[selectedShipId] ?? []).includes(edgeId)) {
+        void onAction({ type: "move-ship", fromEdgeId: selectedShipId, toEdgeId: edgeId }).then(
+          resetSelection,
+        );
+      }
     } else if (mode === "free-road") {
       setSelectedRoadIds((current) => {
         if (current.includes(edgeId)) return current.filter((candidate) => candidate !== edgeId);
@@ -174,10 +199,14 @@ export default function GameRoom({
 
   const playRoadBuilding = () => {
     if (!selectedCard || selectedCard.type !== "road-building" || selectedRoadIds.length === 0) return;
+    const kinds = selectedRoadIds.map((edgeId) =>
+      room.legal.freeShipIds.includes(edgeId) ? ("ship" as const) : ("road" as const),
+    );
     void onAction({
       type: "play-road-building",
       cardId: selectedCard.id,
       edgeIds: selectedRoadIds,
+      kinds,
     }).then(resetSelection);
   };
 
@@ -319,16 +348,47 @@ export default function GameRoom({
       return isMyTurn ? "Elegí un vértice vacío para tu poblado inicial." : `Colocando: ${currentPlayer?.name}`;
     }
     if (game.phase === "setup-road") {
-      return isMyTurn ? "Elegí un camino que salga de ese poblado." : `Colocando: ${currentPlayer?.name}`;
+      return isMyTurn
+        ? "Elegí un camino o, si el poblado es costero, un barco."
+        : `Colocando: ${currentPlayer?.name}`;
+    }
+    if (game.phase === "activate") {
+      return isMyTurn
+        ? "Elegí activar al ladrón o al pirata."
+        : "El jugador activo está eligiendo entre ladrón y pirata.";
     }
     if (game.phase === "robber") {
-      return isMyTurn ? "Elegí un hexágono para mover al ladrón." : "El jugador activo está moviendo al ladrón.";
+      return isMyTurn ? "Elegí un hexágono de tierra para mover al ladrón." : "El jugador activo está moviendo al ladrón.";
     }
     if (game.phase === "robber-victim") {
       return isMyTurn ? "Elegí a quién robarle una carta." : "El jugador activo está eligiendo a quién robar.";
     }
+    if (game.phase === "pirate") {
+      return isMyTurn ? "Elegí un hexágono de mar para el pirata (o el marco)." : "El jugador activo está moviendo al pirata.";
+    }
+    if (game.phase === "pirate-victim") {
+      return isMyTurn ? "Elegí a quién robarle una carta con el pirata." : "El jugador activo está eligiendo a quién robar.";
+    }
+    if (game.phase === "gold") {
+      return isMyTurn && game.self.pendingGoldCount > 0
+        ? "Tus campos de oro producen: elegí recursos."
+        : "Los jugadores eligen recursos de sus campos de oro.";
+    }
+    if (game.phase === "main" && isMyTurn && mode === "ship") {
+      return "Elegí una arista de mar conectada a tu red de barcos.";
+    }
+    if (game.phase === "main" && isMyTurn && mode === "move-ship") {
+      return selectedShipId
+        ? "Elegí el destino resaltado para tu barco."
+        : "Elegí uno de tus barcos con extremo abierto para moverlo.";
+    }
     if (game.phase === "main" && isMyTurn && mode) {
-      const action = mode === "road" ? "construir el camino" : mode === "settlement" ? "construir el poblado" : "mejorar el poblado";
+      const action =
+        mode === "road"
+          ? "construir el camino"
+          : mode === "settlement"
+            ? "construir el poblado"
+            : "mejorar el poblado";
       return `Elegí en el tablero dónde ${action}. Volvé a tocar el botón para cancelar.`;
     }
     if (game.phase === "trade" && offer && offer.fromPlayerId === room.selfPlayerId) {
@@ -436,6 +496,7 @@ export default function GameRoom({
             selfPlayerId={room.selfPlayerId}
             mode={mode}
             selectedRoadIds={selectedRoadIds}
+            selectedShipId={selectedShipId}
             onVertexClick={handleVertexClick}
             onEdgeClick={handleEdgeClick}
             onHexClick={handleHexClick}
@@ -499,7 +560,7 @@ export default function GameRoom({
                     : `Ganó ${game.players.find((player) => player.id === game.winnerId)?.name ?? "un jugador"}`}
                 </h2>
                 <p className="mt-1.5 text-[13px] font-semibold text-[#8a6a3a]">
-                  10 puntos de victoria
+                  {game.winThreshold} puntos de victoria
                 </p>
                 <button
                   className={`${CG_BUTTON_ACCEPT} mt-3`}
@@ -827,7 +888,9 @@ export default function GameRoom({
           <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="victim-title">
             <div className="flex items-start justify-between gap-2.5">
               <div>
-                <p className={MODAL_EYEBROW}>Ladrón en {robberTargetName}</p>
+                <p className={MODAL_EYEBROW}>
+                  {pirateVictim ? "Pirata" : `Ladrón en ${robberTargetName}`}
+                </p>
                 <h2 id="victim-title" className={MODAL_TITLE}>
                   Elegí a quién robar
                 </h2>
@@ -1038,6 +1101,20 @@ function PlayerPanel({
               <img className="h-4 w-auto" src={pieceFile("city", player.color)} alt="" />
               {player.citiesBuilt}
             </span>
+            {player.shipsBuilt > 0 && (
+              <span className="inline-flex items-center gap-1" title="Barcos construidos">
+                <img className="h-4 w-auto" src={pieceFile("ship", player.color)} alt="" />
+                {player.shipsBuilt}
+              </span>
+            )}
+            {player.bonusVictoryPoints > 0 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]"
+                title="Puntos de victoria por islas pequeñas"
+              >
+                islas +{player.bonusVictoryPoints}
+              </span>
+            )}
             {offline && <span className="font-bold text-[#a4462f]">Desconectado</span>}
           </div>
         </div>
@@ -1074,7 +1151,7 @@ function computeProduction(game: PlayerGameView, roll: number): Record<string, R
   for (const hex of game.board.hexes) {
     if (hex.number !== roll || hex.id === game.robberHexId) continue;
     const terrain = hex.terrain;
-    if (terrain === "desert") continue;
+    if (terrain === "desert" || terrain === "sea" || terrain === "gold") continue;
     for (const vertex of game.board.vertices) {
       if (!vertex.hexIds.includes(hex.id)) continue;
       const owner = game.players.find(

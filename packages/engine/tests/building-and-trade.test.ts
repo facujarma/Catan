@@ -69,7 +69,7 @@ describe("construcción", () => {
         playerId: "p1",
         vertexId: adjacentToNew.id,
       }),
-    ).toThrow(/conectarse a un camino y respetar la distancia/i);
+    ).toThrow(/conectarse a un camino o barco y respetar la distancia/i);
   });
 
   it("mejora un poblado a ciudad al coste correcto y actualiza los puntos", () => {

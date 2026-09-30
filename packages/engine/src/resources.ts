@@ -2,6 +2,7 @@ import { RESOURCES, type Resource, type ResourceBundle } from "./types";
 
 export const BUILDING_COSTS = {
   road: { wood: 1, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+  ship: { wood: 1, brick: 0, sheep: 1, wheat: 0, ore: 0 },
   settlement: { wood: 1, brick: 1, sheep: 1, wheat: 1, ore: 0 },
   city: { wood: 0, brick: 0, sheep: 0, wheat: 2, ore: 3 },
   "development-card": { wood: 0, brick: 0, sheep: 1, wheat: 1, ore: 1 },

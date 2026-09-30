@@ -1,3 +1,4 @@
+import { SCENARIOS } from "@catan/engine";
 import type { RoomSnapshot } from "../model";
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD } from "../ui";
 
@@ -11,6 +12,9 @@ interface RoomLobbyProps {
   onAddBot: () => void;
   onRemoveBot: (botId: string) => void;
   onTurnTimeLimitChange: (seconds: number) => void;
+  onExpansionChange: (expansion: "base" | "seafarers") => void;
+  onScenarioChange: (scenario: string) => void;
+  onSetupModeChange: (setupMode: "fixed" | "variable") => void;
   onStart: () => void;
   onLeave: () => void;
   onCopyInvite: () => void;
@@ -37,6 +41,9 @@ export default function RoomLobby({
   onAddBot,
   onRemoveBot,
   onTurnTimeLimitChange,
+  onExpansionChange,
+  onScenarioChange,
+  onSetupModeChange,
   onStart,
   onLeave,
   onCopyInvite,
@@ -56,6 +63,10 @@ export default function RoomLobby({
     room.turnTimeLimitSeconds === 0
       ? "Sin límite"
       : `${room.turnTimeLimitSeconds} segundos por turno`;
+  const scenario = SCENARIOS.find((candidate) => candidate.id === (room.scenario ?? SCENARIOS[0]!.id));
+  const mapVariantLabel =
+    room.players.length >= 4 ? "4 jugadores" : room.players.length === 3 ? "3 jugadores" : "3 o 4 jugadores";
+  const expansionLabel = room.expansion === "seafarers" ? "Navegantes" : "Catan base";
 
   return (
     <section className={`${CARD} p-6 sm:p-7`}>
@@ -84,6 +95,74 @@ export default function RoomLobby({
         <button className={BTN_SECONDARY} type="button" onClick={onSaveName} disabled={busy}>
           Guardar
         </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl border-2 border-[#e3cfa5] bg-[#fffaf0] p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className={EYEBROW}>Expansión y mapa</p>
+            <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#a08a5e]">
+              Se elige antes de empezar. El mapa se arma automáticamente con el tablero de
+              {" "}{mapVariantLabel} que corresponda.
+            </p>
+          </div>
+          {me?.isHost ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <select
+                aria-label="Expansión"
+                className={`${FIELD} mt-1 w-auto min-w-[150px]`}
+                value={room.expansion}
+                disabled={busy}
+                onChange={(event) =>
+                  onExpansionChange(event.target.value === "seafarers" ? "seafarers" : "base")
+                }
+              >
+                <option value="base">Catan base</option>
+                <option value="seafarers">Navegantes</option>
+              </select>
+              {room.expansion === "seafarers" && (
+                <>
+                  <select
+                    aria-label="Mapa de Navegantes"
+                    className={`${FIELD} mt-1 w-auto min-w-[190px]`}
+                    value={room.scenario ?? SCENARIOS[0]!.id}
+                    disabled={busy}
+                    onChange={(event) => onScenarioChange(event.target.value)}
+                  >
+                    {SCENARIOS.map((scene) => (
+                      <option key={scene.id} value={scene.id}>
+                        {scene.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Modo de mapa"
+                    className={`${FIELD} mt-1 w-auto min-w-[130px]`}
+                    value={room.setupMode}
+                    disabled={busy}
+                    onChange={(event) =>
+                      onSetupModeChange(event.target.value === "variable" ? "variable" : "fixed")
+                    }
+                  >
+                    <option value="fixed">Setup fijo</option>
+                    <option value="variable">Setup variable</option>
+                  </select>
+                </>
+              )}
+            </div>
+          ) : (
+            <span className="rounded-2xl border-2 border-[#e3cfa5] bg-white/70 px-3 py-2 text-sm font-bold text-[#7a5320]">
+              {expansionLabel}
+              {room.expansion === "seafarers" && scenario ? ` · ${scenario.name}` : ""}
+            </span>
+          )}
+        </div>
+        {room.expansion === "seafarers" && scenario && (
+          <p className="mt-3 border-t-2 border-dashed border-[#e3cfa5] pt-3 text-xs font-semibold leading-5 text-[#8a6a3a]">
+            {scenario.description}
+            {!me?.isHost && ` · ${room.setupMode === "variable" ? "Setup variable" : "Setup fijo"}`}
+          </p>
+        )}
       </div>
 
       <div className="mt-5 rounded-2xl border-2 border-[#e3cfa5] bg-[#fffaf0] p-4">

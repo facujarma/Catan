@@ -8,6 +8,8 @@ const resourceValidator = v.union(
   v.literal("ore"),
 );
 
+const routeKindValidator = v.union(v.literal("road"), v.literal("ship"));
+
 export const resourceBundleValidator = v.object({
   wood: v.number(),
   brick: v.number(),
@@ -18,7 +20,11 @@ export const resourceBundleValidator = v.object({
 
 export const gameActionValidator = v.union(
   v.object({ type: v.literal("place-setup-settlement"), vertexId: v.string() }),
-  v.object({ type: v.literal("place-setup-road"), edgeId: v.string() }),
+  v.object({
+    type: v.literal("place-setup-road"),
+    edgeId: v.string(),
+    kind: v.optional(routeKindValidator),
+  }),
   v.object({ type: v.literal("roll") }),
   v.object({ type: v.literal("discard"), resources: resourceBundleValidator }),
   v.object({
@@ -27,7 +33,24 @@ export const gameActionValidator = v.union(
     victimId: v.union(v.string(), v.null()),
   }),
   v.object({ type: v.literal("choose-robber-victim"), victimId: v.string() }),
+  v.object({ type: v.literal("activate-robber") }),
+  v.object({ type: v.literal("activate-pirate") }),
+  v.object({
+    type: v.literal("move-pirate"),
+    hexId: v.union(v.string(), v.null()),
+  }),
+  v.object({ type: v.literal("choose-pirate-victim"), victimId: v.string() }),
+  v.object({
+    type: v.literal("choose-gold"),
+    resources: v.array(resourceValidator),
+  }),
   v.object({ type: v.literal("build-road"), edgeId: v.string() }),
+  v.object({ type: v.literal("build-ship"), edgeId: v.string() }),
+  v.object({
+    type: v.literal("move-ship"),
+    fromEdgeId: v.string(),
+    toEdgeId: v.string(),
+  }),
   v.object({ type: v.literal("build-settlement"), vertexId: v.string() }),
   v.object({ type: v.literal("build-city"), vertexId: v.string() }),
   v.object({ type: v.literal("buy-development-card") }),
@@ -42,6 +65,7 @@ export const gameActionValidator = v.union(
     type: v.literal("play-road-building"),
     cardId: v.string(),
     edgeIds: v.array(v.string()),
+    kinds: v.optional(v.array(routeKindValidator)),
   }),
   v.object({
     type: v.literal("make-offer"),

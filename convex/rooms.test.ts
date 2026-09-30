@@ -446,3 +446,86 @@ function safeRobberHex(room: Awaited<ReturnType<typeof snapshot>>): string {
   }
   return robberHexIds[0]!;
 }
+
+async function placeHostSetupWithShips(t: TestClient): Promise<void> {
+  const room = await snapshot(t);
+  const vertexId = room.legal.settlementVertexIds[0];
+  if (!vertexId) throw new Error("No hay vértices legales para el poblado inicial.");
+  await act(t, { type: "place-setup-settlement", vertexId });
+  const afterSettlement = await snapshot(t);
+  const roadId = afterSettlement.legal.roadIds[0];
+  if (roadId) {
+    await act(t, { type: "place-setup-road", edgeId: roadId, kind: "road" });
+    return;
+  }
+  const shipId = afterSettlement.legal.shipIds[0];
+  if (!shipId) throw new Error("No hay rutas iniciales legales.");
+  await act(t, { type: "place-setup-road", edgeId: shipId, kind: "ship" });
+}
+
+describe("expansión Navegantes", () => {
+  test("el anfitrión elige mapa y la partida arranca con el tablero del escenario", async () => {
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.setScenario, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      scenario: "heading-for-new-shores",
+    });
+    await t.mutation(api.rooms.setSetupMode, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      setupMode: "fixed",
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    const room = await snapshot(t);
+    expect(room.expansion).toBe("seafarers");
+    expect(room.scenario).toBe("heading-for-new-shores");
+    expect(room.game?.board.hexes).toHaveLength(35);
+    expect(room.game?.board.hexes.some((hex) => hex.terrain === "sea")).toBe(true);
+    expect(room.game?.board.regions?.filter((region) => region.kind === "small-island")).toHaveLength(4);
+    expect(room.game?.winThreshold).toBe(14);
+    expect(room.game?.piratePosition?.kind).toBe("hex");
+  });
+
+  test("los bots completan el setup con caminos o barcos sin trabarse", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.setScenario, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      scenario: "heading-for-new-shores",
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    await placeHostSetupWithShips(t);
+    await advanceBotActions(t, 4);
+    await placeHostSetupWithShips(t);
+
+    const room = await snapshot(t);
+    expect(room.game?.phase).toBe("awaiting-roll");
+    expect(room.game?.board.hexes).toHaveLength(35);
+    expect(room.game?.players.every((player) => player.settlementsBuilt >= 1)).toBe(true);
+    const routeTotal = room.game!.players.reduce(
+      (sum, player) => sum + player.roadsBuilt + player.shipsBuilt,
+      0,
+    );
+    expect(routeTotal).toBeGreaterThanOrEqual(3);
+  });
+});

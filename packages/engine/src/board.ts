@@ -1,4 +1,4 @@
-import { RESOURCES, type Board, type Edge, type Hex, type Port, type Resource, type Terrain, type Vertex } from "./types";
+import { RESOURCES, type Board, type Edge, type Hex, type Port, type PortType, type Resource, type Terrain, type Vertex } from "./types";
 import { SeededRandom, type RandomSource } from "./random";
 
 const AXIAL_DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -140,7 +140,12 @@ function placeNumberTokens(
   throw new Error("No se pudo generar una distribución válida de números.");
 }
 
-function buildGeometry(hexes: Hex[]): { vertices: Vertex[]; edges: Edge[] } {
+function buildGeometry(hexes: Hex[]): {
+  vertices: Vertex[];
+  edges: Edge[];
+  vertexIdByKey: Map<string, string>;
+  edgeIdByKey: Map<string, string>;
+} {
   const vertexDrafts = new Map<string, VertexDraft>();
   const edgeDrafts = new Map<string, EdgeDraft>();
 
@@ -187,8 +192,10 @@ function buildGeometry(hexes: Hex[]): { vertices: Vertex[]; edges: Edge[] } {
   const sortedEdgeDrafts = [...edgeDrafts.entries()].sort(([left], [right]) =>
     left.localeCompare(right),
   );
+  const edgeIdByKey = new Map<string, string>();
   const edges: Edge[] = sortedEdgeDrafts.map(([key, draft], index) => {
     const id = `e${index}`;
+    edgeIdByKey.set(key, id);
     const vertexIds = draft.vertexKeys
       .map((vertexKey) => vertexIdByKey.get(vertexKey)!)
       .sort((left, right) => Number(left.slice(1)) - Number(right.slice(1))) as [
@@ -233,7 +240,86 @@ function buildGeometry(hexes: Hex[]): { vertices: Vertex[]; edges: Edge[] } {
     throw new Error("La geometría del tablero contiene ids duplicados.");
   }
 
-  return { vertices, edges };
+  return { vertices, edges, vertexIdByKey, edgeIdByKey };
+}
+
+const HEX_CORNER_ANGLES = Array.from({ length: 6 }, (_, corner) => ((30 + corner * 60) * Math.PI) / 180);
+
+function hexCornerPosition(centerX: number, centerY: number, corner: number): [number, number] {
+  const angle = HEX_CORNER_ANGLES[corner % 6]!;
+  return [centerX + Math.cos(angle), centerY + Math.sin(angle)];
+}
+
+function hexCenter(q: number, r: number): [number, number] {
+  return [Math.sqrt(3) * (q + r / 2), 1.5 * r];
+}
+
+export function hexSideEdgeKey(q: number, r: number, side: number): string {
+  const [centerX, centerY] = hexCenter(q, r);
+  const first = positionKey(...hexCornerPosition(centerX, centerY, side));
+  const second = positionKey(...hexCornerPosition(centerX, centerY, (side + 1) % 6));
+  return [first, second].sort().join("|");
+}
+
+export interface BoardHexDraft {
+  q: number;
+  r: number;
+  terrain: Terrain;
+  number: number | null;
+}
+
+export interface BoardPortDraft {
+  q: number;
+  r: number;
+  side: number;
+  type: PortType;
+  ratio: 2 | 3;
+}
+
+export function buildBoardFromDrafts(
+  drafts: readonly BoardHexDraft[],
+  portDrafts: readonly BoardPortDraft[],
+): Board {
+  const hexDrafts: Hex[] = drafts.map((draft) => ({
+    id: `h-${draft.q}-${draft.r}`,
+    q: draft.q,
+    r: draft.r,
+    terrain: draft.terrain,
+    number: draft.number,
+    neighborHexIds: [],
+  }));
+  const hexById = new Map(hexDrafts.map((hex) => [hex.id, hex]));
+  const hexes: Hex[] = hexDrafts.map((hex) => ({
+    ...hex,
+    neighborHexIds: AXIAL_DIRECTIONS.map(([dq, dr]) => `h-${hex.q + dq}-${hex.r + dr}`)
+      .filter((neighborId) => hexById.has(neighborId))
+      .sort(),
+  }));
+
+  const { vertices, edges, edgeIdByKey } = buildGeometry(hexes);
+
+  return {
+    hexes,
+    vertices,
+    edges,
+    ports: portDrafts.map((draft, index) => {
+      const edgeKey = hexSideEdgeKey(draft.q, draft.r, draft.side);
+      const edgeId = edgeIdByKey.get(edgeKey);
+      if (!edgeId) {
+        throw new Error(
+          `El puerto ${index} apunta a una arista inexistente en (${draft.q},${draft.r}) lado ${draft.side}.`,
+        );
+      }
+      const edge = edges.find((candidate) => candidate.id === edgeId)!;
+      return {
+        id: `p${index}`,
+        type: draft.type,
+        ratio: draft.ratio,
+        edgeId,
+        vertexIds: [...edge.vertexIds] as [string, string],
+      };
+    }),
+  };
 }
 
 function orderCoastEdges(edges: readonly Edge[]): Edge[] {

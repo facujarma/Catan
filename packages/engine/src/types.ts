@@ -1,7 +1,7 @@
 export const RESOURCES = ["wood", "brick", "sheep", "wheat", "ore"] as const;
 
 export type Resource = (typeof RESOURCES)[number];
-export type Terrain = Resource | "desert";
+export type Terrain = Resource | "desert" | "sea" | "gold";
 export type ResourceBundle = Record<Resource, number>;
 
 export const DEVELOPMENT_CARD_TYPES = [
@@ -57,11 +57,21 @@ export interface Port {
   vertexIds: [string, string];
 }
 
+export interface BoardRegion {
+  id: string;
+  name: string;
+  kind: "main" | "small-island";
+  bonusVp: number;
+  startingArea: boolean;
+  hexIds: string[];
+}
+
 export interface Board {
   hexes: Hex[];
   vertices: Vertex[];
   edges: Edge[];
   ports: Port[];
+  regions?: BoardRegion[];
 }
 
 export interface PlayerConfig {
@@ -78,9 +88,17 @@ export interface PlayerState {
   developmentCards: HeldDevelopmentCard[];
   boughtDevelopmentCards: DevelopmentCardType[];
   roads: string[];
+  ships: string[];
   settlements: string[];
   cities: string[];
   playedKnights: number;
+  bonusVpTokens: BonusVpToken[];
+}
+
+export interface BonusVpToken {
+  vertexId: string;
+  regionId: string;
+  amount: number;
 }
 
 export type GamePhase =
@@ -88,8 +106,12 @@ export type GamePhase =
   | "setup-road"
   | "awaiting-roll"
   | "discard"
+  | "activate"
   | "robber"
   | "robber-victim"
+  | "pirate"
+  | "pirate-victim"
+  | "gold"
   | "main"
   | "trade"
   | "finished";
@@ -98,6 +120,8 @@ export interface PendingRobberVictim {
   hexId: string;
   victimIds: string[];
 }
+
+export type PiratePosition = { kind: "frame" } | { kind: "hex"; hexId: string };
 
 export interface TradeOffer {
   id: string;
@@ -119,14 +143,21 @@ export interface GameState {
   bank: ResourceBundle;
   developmentDeck: DevelopmentCard[];
   phase: GamePhase;
+  scenarioId: string;
+  winThreshold: number;
   currentPlayerIndex: number;
   setupIndex: number;
   setupRoadFromVertexId: string | null;
   turnNumber: number;
   hasRolled: boolean;
   robberHexId: string;
+  piratePosition: PiratePosition | null;
   pendingDiscards: Record<string, number>;
+  pendingGoldChoices: Record<string, number>;
   pendingRobberVictim: PendingRobberVictim | null;
+  pendingPirateVictim: PendingRobberVictim | null;
+  shipsBuiltThisTurn: string[];
+  movedShipThisTurn: boolean;
   activeTrade: TradeOffer | null;
   longestRoadHolderId: string | null;
   largestArmyHolderId: string | null;
@@ -156,11 +187,16 @@ export interface GameStats {
 export interface CreateGameOptions {
   players: PlayerConfig[];
   seed: number | string;
+  scenarioId?: string;
+  setupMode?: "fixed" | "variable";
+  forbidRedOnGold?: boolean;
 }
+
+export type RouteKind = "road" | "ship";
 
 export type GameAction =
   | { type: "place-setup-settlement"; playerId: string; vertexId: string }
-  | { type: "place-setup-road"; playerId: string; edgeId: string }
+  | { type: "place-setup-road"; playerId: string; edgeId: string; kind?: RouteKind }
   | { type: "roll"; playerId: string }
   | { type: "discard"; playerId: string; resources: ResourceBundle }
   | {
@@ -170,7 +206,14 @@ export type GameAction =
       victimId: string | null;
     }
   | { type: "choose-robber-victim"; playerId: string; victimId: string }
+  | { type: "activate-robber"; playerId: string }
+  | { type: "activate-pirate"; playerId: string }
+  | { type: "move-pirate"; playerId: string; hexId: string | null }
+  | { type: "choose-pirate-victim"; playerId: string; victimId: string }
+  | { type: "choose-gold"; playerId: string; resources: Resource[] }
   | { type: "build-road"; playerId: string; edgeId: string }
+  | { type: "build-ship"; playerId: string; edgeId: string }
+  | { type: "move-ship"; playerId: string; fromEdgeId: string; toEdgeId: string }
   | { type: "build-settlement"; playerId: string; vertexId: string }
   | { type: "build-city"; playerId: string; vertexId: string }
   | { type: "buy-development-card"; playerId: string }
@@ -192,6 +235,7 @@ export type GameAction =
       playerId: string;
       cardId: string;
       edgeIds: string[];
+      kinds?: RouteKind[];
     }
   | {
       type: "make-offer";
@@ -225,14 +269,17 @@ export interface PlayerPublicView {
   resourceCardCount: number;
   developmentCardCount: number;
   roadIds: string[];
+  shipIds: string[];
   settlementVertexIds: string[];
   cityVertexIds: string[];
   roadsBuilt: number;
+  shipsBuilt: number;
   settlementsBuilt: number;
   citiesBuilt: number;
   playedKnights: number;
   longestRoadLength: number;
   publicVictoryPoints: number;
+  bonusVictoryPoints: number;
   isCurrentPlayer: boolean;
 }
 
@@ -242,6 +289,7 @@ export interface PlayerPrivateView {
   hiddenVictoryPoints: number;
   totalVictoryPoints: number;
   pendingDiscardCount: number;
+  pendingGoldCount: number;
 }
 
 export interface PlayerGameView {
@@ -249,6 +297,8 @@ export interface PlayerGameView {
   bank: ResourceBundle;
   developmentDeckCount: number;
   phase: GamePhase;
+  scenarioId: string;
+  winThreshold: number;
   hasRolled: boolean;
   turnNumber: number;
   playedDevelopmentCardThisTurn: boolean;
@@ -256,7 +306,10 @@ export interface PlayerGameView {
   players: PlayerPublicView[];
   self: PlayerPrivateView;
   robberHexId: string;
+  piratePosition: PiratePosition | null;
+  movedShipThisTurn: boolean;
   pendingRobberVictim: PendingRobberVictim | null;
+  pendingPirateVictim: PendingRobberVictim | null;
   lastRoll: DiceRoll | null;
   activeTrade: TradeOffer | null;
   longestRoadHolderId: string | null;

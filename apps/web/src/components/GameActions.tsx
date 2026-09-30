@@ -6,8 +6,21 @@ import { Dices, Eye, EyeOff, Handshake, Hourglass, Layers, Lock } from "lucide-r
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
 import { bundleTotal, canAfford, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
-import { DEV_CARD_BACK_FILE, DEV_CARD_FILES, pieceFile, RESOURCE_CARD_FILES } from "../assets";
-import { CG_BUTTON_ACCEPT, MODAL, MODAL_ACTIONS, MODAL_BACKDROP } from "../ui";
+import {
+  DEV_CARD_BACK_FILE,
+  DEV_CARD_FILES,
+  PIRATE_ICON_FILE,
+  pieceFile,
+  RESOURCE_CARD_FILES,
+  ROBBER_ICON_FILE,
+} from "../assets";
+import {
+  CG_BUTTON_ACCEPT,
+  CG_BUTTON_NEUTRAL,
+  MODAL,
+  MODAL_ACTIONS,
+  MODAL_BACKDROP,
+} from "../ui";
 
 interface GameActionsProps {
   room: RoomSnapshot;
@@ -30,11 +43,15 @@ const CARD_NAMES: Record<HeldDevelopmentCard["type"], string> = {
 
 const PHASE_LABEL: Record<string, string> = {
   "setup-settlement": "Colocá tu poblado inicial",
-  "setup-road": "Colocá tu camino inicial",
+  "setup-road": "Colocá tu camino o barco inicial",
   "awaiting-roll": "Tirá los dados",
   discard: "Descartá por el siete",
+  activate: "Ladrón o pirata",
   robber: "Movés al ladrón",
   "robber-victim": "Elegís a quién robar",
+  pirate: "Movés al pirata",
+  "pirate-victim": "Elegís a quién robar",
+  gold: "Campos de oro",
   main: "Acciones",
   trade: "Comercio en curso",
   finished: "Partida terminada",
@@ -184,6 +201,7 @@ export default function GameActions({
   const isMainTurn = game.phase === "main" && isMyTurn;
   const [discard, setDiscard] = useState<ResourceBundle>(emptyBundle);
   const [discardSubmitted, setDiscardSubmitted] = useState(false);
+  const [goldPicks, setGoldPicks] = useState<Resource[]>([]);
   const [handHidden, setHandHidden] = useState(() => {
     try {
       return window.localStorage.getItem("catan:hand-hidden") === "1";
@@ -219,6 +237,11 @@ export default function GameActions({
     setDiscardSubmitted(false);
   }, [pendingCount]);
 
+  const pendingGold = game.self.pendingGoldCount;
+  useEffect(() => {
+    setGoldPicks([]);
+  }, [pendingGold]);
+
   const toggleMode = (next: BoardMode) => {
     onSelectedCard(null);
     onModeChange(mode === next ? null : next);
@@ -242,6 +265,7 @@ export default function GameActions({
     !game.playedDevelopmentCardThisTurn;
 
   const roadsLeft = 15 - (selfPlayer?.roadsBuilt ?? 0);
+  const shipsLeft = 15 - (selfPlayer?.shipsBuilt ?? 0);
   const settlementsLeft = 5 - (selfPlayer?.settlementsBuilt ?? 0);
   const citiesLeft = 4 - (selfPlayer?.citiesBuilt ?? 0);
   const canBuyDevelopmentCard =
@@ -376,6 +400,34 @@ export default function GameActions({
             >
               <Dices size={14} /> Tirar
             </button>
+          ) : isMyTurn && game.phase === "activate" ? (
+            <span className="flex flex-wrap items-center justify-center gap-1.5">
+              <button
+                className="inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50"
+                type="button"
+                disabled={busy}
+                onClick={() => void onAction({ type: "activate-robber" })}
+              >
+                <img className="h-5 w-auto" src={ROBBER_ICON_FILE} alt="" /> Ladrón
+              </button>
+              <button
+                className="inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50"
+                type="button"
+                disabled={busy}
+                onClick={() => void onAction({ type: "activate-pirate" })}
+              >
+                <img className="h-5 w-auto" src={PIRATE_ICON_FILE} alt="" /> Pirata
+              </button>
+            </span>
+          ) : isMyTurn && game.phase === "pirate" ? (
+            <button
+              className="inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50"
+              type="button"
+              disabled={busy}
+              onClick={() => void onAction({ type: "move-pirate", hexId: null })}
+            >
+              Mover al marco
+            </button>
           ) : (
             <p className="max-w-[200px] text-center text-[10px] font-semibold text-[#b08a4a]">
               {PHASE_LABEL[game.phase] ?? game.phase}
@@ -453,6 +505,30 @@ export default function GameActions({
             disabled={busy || !isMainTurn || room.legal.cityVertexIds.length === 0}
             count={citiesLeft}
             onClick={() => toggleMode("city")}
+          />
+          <ActionButton
+            icon={
+              <img
+                className="h-6 w-auto"
+                src={pieceFile("ship", selfColor)}
+                alt=""
+                draggable={false}
+              />
+            }
+            label="Barco"
+            title="Construir barco (madera + oveja)"
+            active={mode === "ship"}
+            disabled={busy || !isMainTurn || room.legal.shipIds.length === 0}
+            count={shipsLeft}
+            onClick={() => toggleMode("ship")}
+          />
+          <ActionButton
+            icon={<img className="h-6 w-auto" src={pieceFile("ship", selfColor)} alt="" draggable={false} />}
+            label="Mover"
+            title="Mover un barco (una vez por turno)"
+            active={mode === "move-ship"}
+            disabled={busy || !isMainTurn || room.legal.movableShipIds.length === 0}
+            onClick={() => toggleMode("move-ship")}
           />
           <ActionButton
             icon={<Hourglass size={16} />}
@@ -534,6 +610,80 @@ export default function GameActions({
                 onClick={submitDiscard}
               >
                 Descartar
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {game.phase === "gold" && pendingGold > 0 && (
+        <div className={MODAL_BACKDROP} role="presentation">
+          <section className={MODAL} role="dialog" aria-modal="true" aria-labelledby="gold-title">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#a9793a]">
+                Campos de oro
+              </p>
+              <h2 id="gold-title" className="mt-1 font-display text-[22px] font-black text-[#4a2c12]">
+                Elegí {pendingGold} recurso{pendingGold === 1 ? "" : "s"}
+              </h2>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
+              Tus poblados y ciudades sobre campos de oro produjeron {pendingGold}{" "}
+              recurso{pendingGold === 1 ? "" : "s"}. Elegí cuáles tomar del banco.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              {RESOURCES.map((resource) => {
+                const selectedCount = goldPicks.filter((candidate) => candidate === resource).length;
+                return (
+                  <button
+                    key={resource}
+                    type="button"
+                    className={`relative inline-flex h-[60px] w-[43px] items-center justify-center rounded-[4px] transition disabled:opacity-50 ${
+                      selectedCount > 0
+                        ? "outline outline-[3px] outline-offset-1 outline-catan-gold"
+                        : "enabled:hover:-translate-y-0.5"
+                    }`}
+                    title={`Banco: ${game.bank[resource]}`}
+                    disabled={busy || selectedCount >= game.bank[resource]}
+                    onClick={() =>
+                      setGoldPicks((current) =>
+                        current.length >= pendingGold ? current : [...current, resource],
+                      )
+                    }
+                  >
+                    <img
+                      className="h-full w-full drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)]"
+                      src={RESOURCE_CARD_FILES[resource]}
+                      alt={RESOURCE_NAMES[resource]}
+                      draggable={false}
+                    />
+                    {selectedCount > 0 && (
+                      <span className="absolute -bottom-1.5 -right-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-paper-soft bg-[#274b66] text-[11px] font-black text-white">
+                        {selectedCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className={MODAL_ACTIONS}>
+              <button
+                className={CG_BUTTON_NEUTRAL}
+                type="button"
+                disabled={goldPicks.length === 0}
+                onClick={() => setGoldPicks((current) => current.slice(0, -1))}
+              >
+                Deshacer
+              </button>
+              <button
+                className={CG_BUTTON_ACCEPT}
+                type="button"
+                disabled={busy || goldPicks.length !== pendingGold}
+                onClick={() =>
+                  void onAction({ type: "choose-gold", resources: goldPicks })
+                }
+              >
+                Tomar recursos
               </button>
             </div>
           </section>

@@ -5,11 +5,15 @@ import {
   EngineError,
   getLegalCityUpgrades,
   getLegalRoadPlacements,
+  getLegalShipMoveTargets,
+  getLegalShipPlacements,
   getLegalSettlementPlacements,
   getMaritimeTradeRatio,
+  getMovableShipIds,
   getPlayerView,
   getRobberVictims,
   RESOURCES,
+  SCENARIOS,
 } from "@catan/engine";
 import type { GameAction, GameState, Resource, ResourceBundle } from "@catan/engine";
 import { ConvexError, v } from "convex/values";
@@ -169,6 +173,23 @@ function actionLogMessage(action: GameAction, playerName: string, nextState: Gam
         nextState.players.find((player) => player.id === action.victimId)?.name ?? "un rival";
       return `${playerName} le robó una carta a ${victimName}.`;
     }
+    case "activate-robber":
+      return `${playerName} decidió mover al ladrón.`;
+    case "activate-pirate":
+      return `${playerName} decidió mover al pirata.`;
+    case "move-pirate":
+      return `${playerName} movió al pirata${action.hexId === null ? " al marco" : ""}.`;
+    case "choose-pirate-victim": {
+      const victimName =
+        nextState.players.find((player) => player.id === action.victimId)?.name ?? "un rival";
+      return `${playerName} le robó una carta a ${victimName} con el pirata.`;
+    }
+    case "choose-gold":
+      return `${playerName} eligió recursos de un campo de oro.`;
+    case "build-ship":
+      return `${playerName} construyó un barco.`;
+    case "move-ship":
+      return `${playerName} movió un barco.`;
     case "buy-development-card":
       return `${playerName} compró una carta de desarrollo.`;
     case "play-knight":
@@ -242,11 +263,26 @@ function botsNeedingDiscard(room: RoomDocument, state: GameState): string[] {
     .sort();
 }
 
+function botsNeedingGold(room: RoomDocument, state: GameState): string[] {
+  return Object.keys(state.pendingGoldChoices)
+    .filter((playerId) => isBotPlayer(room, playerId))
+    .sort();
+}
+
 function botActionKey(room: RoomDocument, state: GameState): string | null {
   const discards = botsNeedingDiscard(room, state);
+  const goldChoices = botsNeedingGold(room, state);
   const actingPlayerId = playerIdAt(state);
-  if (discards.length === 0 && !isBotPlayer(room, actingPlayerId)) return null;
-  return [state.turnNumber, state.phase, actingPlayerId, discards.join("+")].join(":");
+  if (discards.length === 0 && goldChoices.length === 0 && !isBotPlayer(room, actingPlayerId)) {
+    return null;
+  }
+  return [
+    state.turnNumber,
+    state.phase,
+    actingPlayerId,
+    discards.join("+"),
+    goldChoices.join("+"),
+  ].join(":");
 }
 
 function randomItem<T>(items: readonly T[]): T | null {
@@ -272,7 +308,9 @@ function randomDiscardBundle(state: GameState, playerId: string, count: number):
 
 function randomRobberHexAction(state: GameState, playerId: string): GameAction | null {
   const hexId = randomItem(
-    state.board.hexes.filter((hex) => hex.id !== state.robberHexId).map((hex) => hex.id),
+    state.board.hexes
+      .filter((hex) => hex.id !== state.robberHexId && hex.terrain !== "sea")
+      .map((hex) => hex.id),
   );
   return hexId ? { type: "move-robber", playerId, hexId, victimId: null } : null;
 }
@@ -283,6 +321,40 @@ function randomVictimAction(state: GameState, playerId: string): GameAction | nu
   return victimId ? { type: "choose-robber-victim", playerId, victimId } : null;
 }
 
+function randomPirateVictimAction(state: GameState, playerId: string): GameAction | null {
+  const pending = state.pendingPirateVictim;
+  const victimId = pending ? randomItem(pending.victimIds) : null;
+  return victimId ? { type: "choose-pirate-victim", playerId, victimId } : null;
+}
+
+function randomGoldBundle(state: GameState, playerId: string, count: number): Resource[] {
+  const available: Resource[] = [];
+  for (const resource of RESOURCES) {
+    for (let index = 0; index < state.bank[resource]; index += 1) available.push(resource);
+  }
+  const picks: Resource[] = [];
+  for (let index = 0; index < count && available.length > 0; index += 1) {
+    const [resource] = available.splice(Math.floor(Math.random() * available.length), 1);
+    if (resource) picks.push(resource);
+  }
+  while (picks.length < count) picks.push("wood");
+  return picks;
+}
+
+function randomPirateMoveAction(state: GameState, playerId: string): GameAction | null {
+  const currentHexId =
+    state.piratePosition?.kind === "hex" ? state.piratePosition.hexId : null;
+  const targets = state.board.hexes
+    .filter((hex) => hex.terrain === "sea" && hex.id !== currentHexId)
+    .map((hex) => hex.id);
+  const hexId = randomItem(targets);
+  if (hexId) return { type: "move-pirate", playerId, hexId };
+  if (state.piratePosition?.kind === "hex") {
+    return { type: "move-pirate", playerId, hexId: null };
+  }
+  return null;
+}
+
 function botTurnAction(state: GameState, playerId: string): GameAction | null {
   switch (state.phase) {
     case "setup-settlement": {
@@ -290,15 +362,28 @@ function botTurnAction(state: GameState, playerId: string): GameAction | null {
       return vertexId ? { type: "place-setup-settlement", playerId, vertexId } : null;
     }
     case "setup-road": {
-      const edgeId = randomItem(getLegalRoadPlacements(state, playerId));
-      return edgeId ? { type: "place-setup-road", playerId, edgeId } : null;
+      const roadId = randomItem(getLegalRoadPlacements(state, playerId));
+      const shipId = randomItem(getLegalShipPlacements(state, playerId));
+      if (roadId && (shipId === null || Math.random() < 0.5)) {
+        return { type: "place-setup-road", playerId, edgeId: roadId, kind: "road" };
+      }
+      if (shipId) return { type: "place-setup-road", playerId, edgeId: shipId, kind: "ship" };
+      return roadId ? { type: "place-setup-road", playerId, edgeId: roadId, kind: "road" } : null;
     }
     case "awaiting-roll":
       return { type: "roll", playerId };
+    case "activate":
+      return Math.random() < 0.5
+        ? { type: "activate-robber", playerId }
+        : { type: "activate-pirate", playerId };
     case "robber":
       return randomRobberHexAction(state, playerId);
     case "robber-victim":
       return randomVictimAction(state, playerId);
+    case "pirate":
+      return randomPirateMoveAction(state, playerId);
+    case "pirate-victim":
+      return randomPirateVictimAction(state, playerId);
     case "main":
     case "trade":
       return { type: "end-turn", playerId };
@@ -313,9 +398,25 @@ function deadlineAction(state: GameState): GameAction | null {
     case "setup-settlement":
     case "setup-road":
     case "awaiting-roll":
+    case "activate":
     case "robber":
     case "robber-victim":
+    case "pirate":
+    case "pirate-victim":
       return botTurnAction(state, playerId);
+    case "gold": {
+      const goldPlayerId = Object.keys(state.pendingGoldChoices)[0];
+      if (!goldPlayerId) return null;
+      return {
+        type: "choose-gold",
+        playerId: goldPlayerId,
+        resources: randomGoldBundle(
+          state,
+          goldPlayerId,
+          state.pendingGoldChoices[goldPlayerId]!,
+        ),
+      };
+    }
     case "discard": {
       const discardPlayerId = Object.keys(state.pendingDiscards)[0];
       if (!discardPlayerId) return null;
@@ -354,9 +455,14 @@ function stepOf(state: GameState): GameStep {
       return "roll";
     case "discard":
       return "discard";
+    case "gold":
+      return "discard";
+    case "activate":
     case "robber":
+    case "pirate":
       return "robber";
     case "robber-victim":
+    case "pirate-victim":
       return "robber-victim";
     case "main":
       return "main";
@@ -818,6 +924,69 @@ export const setTurnTimeLimit = mutation({
   },
 });
 
+export const setExpansion = mutation({
+  args: {
+    code: v.string(),
+    playerToken: v.string(),
+    expansion: v.union(v.literal("base"), v.literal("seafarers")),
+  },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) {
+      fail("HOST_ONLY", "Solo quien creó la sala puede elegir la expansión.");
+    }
+    const expansion = args.expansion;
+    if (expansion === "seafarers") {
+      await ctx.db.patch(room._id, {
+        expansion,
+        scenario: room.scenario ?? SCENARIOS[0]!.id,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.patch(room._id, { expansion, updatedAt: Date.now() });
+    }
+    return { expansion };
+  },
+});
+
+export const setScenario = mutation({
+  args: { code: v.string(), playerToken: v.string(), scenario: v.string() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) {
+      fail("HOST_ONLY", "Solo quien creó la sala puede elegir el mapa.");
+    }
+    if (!SCENARIOS.some((scenario) => scenario.id === args.scenario)) {
+      fail("UNKNOWN_SCENARIO", "Ese mapa no existe.");
+    }
+    await ctx.db.patch(room._id, {
+      expansion: "seafarers",
+      scenario: args.scenario,
+      updatedAt: Date.now(),
+    });
+    return { scenario: args.scenario };
+  },
+});
+
+export const setSetupMode = mutation({
+  args: {
+    code: v.string(),
+    playerToken: v.string(),
+    setupMode: v.union(v.literal("fixed"), v.literal("variable")),
+  },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) {
+      fail("HOST_ONLY", "Solo quien creó la sala puede elegir el modo de mapa.");
+    }
+    await ctx.db.patch(room._id, { setupMode: args.setupMode, updatedAt: Date.now() });
+    return { setupMode: args.setupMode };
+  },
+});
+
 export const startGame = mutation({
   args: { code: v.string(), playerToken: v.string() },
   handler: async (ctx, args) => {
@@ -829,9 +998,16 @@ export const startGame = mutation({
       fail("PLAYERS_NOT_READY", "Todos los jugadores deben marcarse listos.");
     }
 
+    const expansion = room.expansion ?? "base";
+    const scenarioId = expansion === "seafarers" ? (room.scenario ?? SCENARIOS[0]!.id) : undefined;
+    if (expansion === "seafarers" && !SCENARIOS.some((scenario) => scenario.id === scenarioId)) {
+      fail("UNKNOWN_SCENARIO", "El mapa elegido no existe.");
+    }
     const gameState = createGame({
       players: shufflePlayers(room.players.map(({ id, name }) => ({ id, name }))),
       seed: String(room._id),
+      ...(scenarioId ? { scenarioId } : {}),
+      setupMode: room.setupMode ?? "fixed",
     });
     await writeEvent(ctx, room, member.id, member.name, "system", "La partida comenzó.");
     await writeEvent(
@@ -900,12 +1076,32 @@ export const getRoom = query({
       pauseRemainingMs: room.pauseRemainingMs ?? null,
       pauseRequest: room.pauseRequest ?? null,
       turnStats: room.turnStats ?? {},
+      expansion: room.expansion ?? "base",
+      scenario: room.scenario ?? null,
+      setupMode: room.setupMode ?? "fixed",
       game: gameState ? getPlayerView(gameState, member.id) : null,
       legal: gameState
         ? {
             settlementVertexIds: getLegalSettlementPlacements(gameState, member.id),
             roadIds: getLegalRoadPlacements(gameState, member.id),
             freeRoadIds: getLegalRoadPlacements(gameState, member.id, { free: true }),
+            shipIds: getLegalShipPlacements(gameState, member.id),
+            freeShipIds: getLegalShipPlacements(gameState, member.id, { free: true }),
+            movableShipIds: getMovableShipIds(gameState, member.id),
+            shipMoveTargets: Object.fromEntries(
+              getMovableShipIds(gameState, member.id).map((edgeId) => [
+                edgeId,
+                getLegalShipMoveTargets(gameState, member.id, edgeId),
+              ]),
+            ),
+            pirateTargetHexIds: gameState.board.hexes
+              .filter(
+                (hex) =>
+                  hex.terrain === "sea" &&
+                  !(gameState.piratePosition?.kind === "hex" &&
+                    gameState.piratePosition.hexId === hex.id),
+              )
+              .map((hex) => hex.id),
             cityVertexIds: getLegalCityUpgrades(gameState, member.id),
             tradeRatios: {
               wood: getMaritimeTradeRatio(gameState, member.id, "wood"),
@@ -915,13 +1111,18 @@ export const getRoom = query({
               ore: getMaritimeTradeRatio(gameState, member.id, "ore"),
             },
             robberHexIds: gameState.board.hexes
-              .filter((hex) => hex.id !== gameState.robberHexId)
+              .filter((hex) => hex.id !== gameState.robberHexId && hex.terrain !== "sea")
               .map((hex) => hex.id),
           }
         : {
             settlementVertexIds: [],
             roadIds: [],
             freeRoadIds: [],
+            shipIds: [],
+            freeShipIds: [],
+            movableShipIds: [],
+            shipMoveTargets: {},
+            pirateTargetHexIds: [],
             cityVertexIds: [],
             tradeRatios: { wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4 },
             robberHexIds: [],
@@ -1166,6 +1367,7 @@ export const playBotTurn = internalMutation({
     const events: FlowEvent[] = [];
     for (let step = 0; step < MAX_BOT_ACTIONS_PER_RUN; step += 1) {
       const discardPlayerId = botsNeedingDiscard(room, flow.state)[0];
+      const goldPlayerId = botsNeedingGold(room, flow.state)[0];
       const action =
         discardPlayerId !== undefined
           ? {
@@ -1177,15 +1379,31 @@ export const playBotTurn = internalMutation({
                 flow.state.pendingDiscards[discardPlayerId]!,
               ),
             }
-          : playerIdAt(flow.state) === actingPlayerId && isBotPlayer(room, actingPlayerId)
-            ? botTurnAction(flow.state, actingPlayerId)
-            : null;
+          : goldPlayerId !== undefined
+            ? {
+                type: "choose-gold" as const,
+                playerId: goldPlayerId,
+                resources: randomGoldBundle(
+                  flow.state,
+                  goldPlayerId,
+                  flow.state.pendingGoldChoices[goldPlayerId]!,
+                ),
+              }
+            : playerIdAt(flow.state) === actingPlayerId && isBotPlayer(room, actingPlayerId)
+              ? botTurnAction(flow.state, actingPlayerId)
+              : null;
       if (!action) break;
 
       flow = advanceGameFlow(room, flow, action);
       events.push(actionEvent(action, playerName(room, action.playerId), flow.state));
       if (flow.state.phase === "finished") break;
-      if (playerIdAt(flow.state) !== actingPlayerId && flow.state.phase !== "discard") break;
+      if (
+        playerIdAt(flow.state) !== actingPlayerId &&
+        flow.state.phase !== "discard" &&
+        flow.state.phase !== "gold"
+      ) {
+        break;
+      }
     }
 
     if (events.length === 0) return null;

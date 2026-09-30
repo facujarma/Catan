@@ -31,6 +31,11 @@ export interface LegalPlacements {
   settlementVertexIds: string[];
   roadIds: string[];
   freeRoadIds: string[];
+  shipIds: string[];
+  freeShipIds: string[];
+  movableShipIds: string[];
+  shipMoveTargets: Record<string, string[]>;
+  pirateTargetHexIds: string[];
   cityVertexIds: string[];
   tradeRatios: Record<Resource, number>;
   robberHexIds: string[];
@@ -49,6 +54,9 @@ export interface RoomSnapshot {
   pauseRemainingMs: number | null;
   pauseRequest: PauseRequest | null;
   turnStats: Record<string, TurnStat>;
+  expansion: "base" | "seafarers";
+  scenario: string | null;
+  setupMode: "fixed" | "variable";
   game: PlayerGameView | null;
   legal: LegalPlacements;
 }

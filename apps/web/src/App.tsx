@@ -60,6 +60,9 @@ function CatanApp() {
   const addBotMutation = useMutation(api.rooms.addBot);
   const removeBotMutation = useMutation(api.rooms.removeBot);
   const setTurnTimeLimitMutation = useMutation(api.rooms.setTurnTimeLimit);
+  const setExpansionMutation = useMutation(api.rooms.setExpansion);
+  const setScenarioMutation = useMutation(api.rooms.setScenario);
+  const setSetupModeMutation = useMutation(api.rooms.setSetupMode);
   const startGameMutation = useMutation(api.rooms.startGame);
   const applyActionMutation = useMutation(api.rooms.applyGameAction);
   const requestPauseMutation = useMutation(api.rooms.requestPause);
@@ -195,6 +198,27 @@ function CatanApp() {
     if (!roomCode) return;
     await run(() =>
       setTurnTimeLimitMutation({ code: roomCode, playerToken: identity.playerToken, seconds }),
+    );
+  };
+
+  const setExpansion = async (expansion: "base" | "seafarers") => {
+    if (!roomCode) return;
+    await run(() =>
+      setExpansionMutation({ code: roomCode, playerToken: identity.playerToken, expansion }),
+    );
+  };
+
+  const setScenario = async (scenario: string) => {
+    if (!roomCode) return;
+    await run(() =>
+      setScenarioMutation({ code: roomCode, playerToken: identity.playerToken, scenario }),
+    );
+  };
+
+  const setSetupMode = async (setupMode: "fixed" | "variable") => {
+    if (!roomCode) return;
+    await run(() =>
+      setSetupModeMutation({ code: roomCode, playerToken: identity.playerToken, setupMode }),
     );
   };
 
@@ -355,6 +379,9 @@ function CatanApp() {
             onAddBot={addBot}
             onRemoveBot={removeBot}
             onTurnTimeLimitChange={setTurnTimeLimit}
+            onExpansionChange={setExpansion}
+            onScenarioChange={setScenario}
+            onSetupModeChange={setSetupMode}
             onStart={startGame}
             onLeave={leaveRoom}
             onCopyInvite={copyInvite}

@@ -15,21 +15,40 @@ function ownerAtVertex(state: GameState, vertexId: string): string | null {
   return null;
 }
 
-export function calculateLongestRoad(state: GameState, playerId: string): number {
-  const player = getPlayer(state, playerId);
-  if (player.roads.length === 0) return 0;
+interface RouteGraph {
+  kindByEdge: Map<string, "road" | "ship">;
+  edgesByVertex: Map<string, string[]>;
+  edgeById: Map<string, { id: string; vertexIds: [string, string] }>;
+}
 
-  const edgeById = new Map(state.board.edges.map((edge) => [edge.id, edge]));
-  const roadsByVertex = new Map<string, string[]>();
-  for (const edgeId of player.roads) {
-    const edge = edgeById.get(edgeId);
-    if (!edge) continue;
+function buildRouteGraph(state: GameState, playerId: string): RouteGraph {
+  const player = getPlayer(state, playerId);
+  const kindByEdge = new Map<string, "road" | "ship">();
+  for (const edgeId of player.roads) kindByEdge.set(edgeId, "road");
+  for (const edgeId of player.ships) kindByEdge.set(edgeId, "ship");
+
+  const edgeById = new Map<string, { id: string; vertexIds: [string, string] }>();
+  const edgesByVertex = new Map<string, string[]>();
+  for (const edge of state.board.edges) {
+    if (!kindByEdge.has(edge.id)) continue;
+    edgeById.set(edge.id, { id: edge.id, vertexIds: edge.vertexIds });
     for (const vertexId of edge.vertexIds) {
-      const connectedEdges = roadsByVertex.get(vertexId) ?? [];
-      connectedEdges.push(edgeId);
-      roadsByVertex.set(vertexId, connectedEdges);
+      const list = edgesByVertex.get(vertexId) ?? [];
+      list.push(edge.id);
+      edgesByVertex.set(vertexId, list);
     }
   }
+  return { kindByEdge, edgesByVertex, edgeById };
+}
+
+function ownBuildingAt(state: GameState, playerId: string, vertexId: string): boolean {
+  const player = getPlayer(state, playerId);
+  return player.settlements.includes(vertexId) || player.cities.includes(vertexId);
+}
+
+export function calculateLongestRoad(state: GameState, playerId: string): number {
+  const graph = buildRouteGraph(state, playerId);
+  if (graph.kindByEdge.size === 0) return 0;
 
   const blockedVertices = new Set<string>();
   for (const otherPlayer of state.players) {
@@ -40,26 +59,78 @@ export function calculateLongestRoad(state: GameState, playerId: string): number
   }
 
   let longest = 0;
-  const visit = (vertexId: string, usedEdges: Set<string>, length: number): void => {
+  const visit = (
+    vertexId: string,
+    previousEdgeId: string | null,
+    usedEdges: Set<string>,
+    length: number,
+  ): void => {
     if (length > longest) longest = length;
     if (length > 0 && blockedVertices.has(vertexId)) return;
 
-    for (const edgeId of roadsByVertex.get(vertexId) ?? []) {
+    for (const edgeId of graph.edgesByVertex.get(vertexId) ?? []) {
       if (usedEdges.has(edgeId)) continue;
-      const edge = edgeById.get(edgeId)!;
+      if (previousEdgeId !== null) {
+        const previousKind = graph.kindByEdge.get(previousEdgeId);
+        const nextKind = graph.kindByEdge.get(edgeId);
+        if (previousKind !== nextKind && !ownBuildingAt(state, playerId, vertexId)) continue;
+      }
+      const edge = graph.edgeById.get(edgeId)!;
       const nextVertexId = edge.vertexIds.find((candidate) => candidate !== vertexId);
       if (!nextVertexId) continue;
 
       usedEdges.add(edgeId);
-      visit(nextVertexId, usedEdges, length + 1);
+      visit(nextVertexId, edgeId, usedEdges, length + 1);
       usedEdges.delete(edgeId);
     }
   };
 
-  for (const startVertexId of roadsByVertex.keys()) {
-    visit(startVertexId, new Set(), 0);
+  for (const startVertexId of graph.edgesByVertex.keys()) {
+    visit(startVertexId, null, new Set(), 0);
   }
   return longest;
+}
+
+export function isShipPartOfClosedLine(
+  state: GameState,
+  playerId: string,
+  edgeId: string,
+): boolean {
+  const player = getPlayer(state, playerId);
+  if (!player.ships.includes(edgeId)) return false;
+  const edge = state.board.edges.find((candidate) => candidate.id === edgeId);
+  if (!edge) return false;
+
+  const shipEdgesByVertex = new Map<string, string[]>();
+  for (const shipId of player.ships) {
+    if (shipId === edgeId) continue;
+    const shipEdge = state.board.edges.find((candidate) => candidate.id === shipId);
+    if (!shipEdge) continue;
+    for (const vertexId of shipEdge.vertexIds) {
+      const list = shipEdgesByVertex.get(vertexId) ?? [];
+      list.push(shipId);
+      shipEdgesByVertex.set(vertexId, list);
+    }
+  }
+
+  const reachesBuilding = (startVertexId: string): boolean => {
+    const seen = new Set<string>([startVertexId]);
+    const stack = [startVertexId];
+    while (stack.length > 0) {
+      const vertexId = stack.pop()!;
+      if (ownBuildingAt(state, playerId, vertexId)) return true;
+      for (const shipId of shipEdgesByVertex.get(vertexId) ?? []) {
+        const shipEdge = state.board.edges.find((candidate) => candidate.id === shipId)!;
+        const nextVertexId = shipEdge.vertexIds.find((candidate) => candidate !== vertexId);
+        if (!nextVertexId || seen.has(nextVertexId)) continue;
+        seen.add(nextVertexId);
+        stack.push(nextVertexId);
+      }
+    }
+    return false;
+  };
+
+  return reachesBuilding(edge.vertexIds[0]) && reachesBuilding(edge.vertexIds[1]);
 }
 
 function chooseAwardHolder(
@@ -99,13 +170,19 @@ export function recalculateAwards(state: GameState): void {
   );
 }
 
+export function getBonusVictoryPoints(state: GameState, playerId: string): number {
+  const player = getPlayer(state, playerId);
+  return player.bonusVpTokens.reduce((total, token) => total + token.amount, 0);
+}
+
 export function getPublicVictoryPoints(state: GameState, playerId: string): number {
   const player = getPlayer(state, playerId);
   return (
     player.settlements.length +
     player.cities.length * 2 +
     (state.longestRoadHolderId === playerId ? 2 : 0) +
-    (state.largestArmyHolderId === playerId ? 2 : 0)
+    (state.largestArmyHolderId === playerId ? 2 : 0) +
+    getBonusVictoryPoints(state, playerId)
   );
 }
 

@@ -2,15 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import type { PlayerGameView } from "@catan/engine";
 import {
   GENERIC_PORT_FILE,
+  GOLD_TILE_FILE,
+  PIRATE_ICON_FILE,
   pieceFile,
   RESOURCE_PORT_FILES,
   ROBBER_ICON_FILE,
+  SEA_TILE_FILE,
   TILE_FILES,
   TILE_FRAME_FILE,
 } from "../assets";
 import type { LegalPlacements } from "../model";
 
-export type BoardMode = "road" | "free-road" | "settlement" | "city" | "robber" | null;
+export type BoardMode = "road" | "free-road" | "ship" | "move-ship" | "settlement" | "city" | "robber" | null;
 
 interface BoardSvgProps {
   game: PlayerGameView;
@@ -18,6 +21,7 @@ interface BoardSvgProps {
   selfPlayerId: string;
   mode: BoardMode;
   selectedRoadIds: string[];
+  selectedShipId: string | null;
   onVertexClick: (vertexId: string) => void;
   onEdgeClick: (edgeId: string) => void;
   onHexClick: (hexId: string) => void;
@@ -36,6 +40,8 @@ const TERRAIN_FILL: Record<string, string> = {
   wheat: "url(#terrain-wheat)",
   ore: "url(#terrain-ore)",
   desert: "url(#terrain-desert)",
+  gold: "url(#terrain-gold)",
+  sea: "url(#terrain-sea)",
 };
 
 function project(x: number, y: number): [number, number] {
@@ -269,6 +275,7 @@ export default function BoardSvg({
   selfPlayerId,
   mode,
   selectedRoadIds,
+  selectedShipId,
   onVertexClick,
   onEdgeClick,
   onHexClick,
@@ -313,6 +320,15 @@ export default function BoardSvg({
   const edgeById = new Map(game.board.edges.map((edge) => [edge.id, edge]));
   const vertexById = new Map(game.board.vertices.map((vertex) => [vertex.id, vertex]));
   const self = playerById.get(selfPlayerId);
+  const hasSeaHexes = game.board.hexes.some((hex) => hex.terrain === "sea");
+  const pirateHexId =
+    game.piratePosition && game.piratePosition.kind === "hex"
+      ? game.piratePosition.hexId
+      : null;
+  const shipMoveTargets = new Set(
+    selectedShipId ? (legal.shipMoveTargets[selectedShipId] ?? []) : [],
+  );
+  const movableShips = new Set(legal.movableShipIds);
 
   const canPlaceFreeRoad = (edgeId: string): boolean => {
     if (!self || selectedRoadIds.includes(edgeId) || self.roadIds.length + selectedRoadIds.length >= 15) {
@@ -337,6 +353,32 @@ export default function BoardSvg({
     });
   };
 
+  const canPlaceFreeShip = (edgeId: string): boolean => {
+    if (!self || selectedRoadIds.includes(edgeId) || self.shipIds.length + selectedRoadIds.length >= 15) {
+      return false;
+    }
+    const edge = edgeById.get(edgeId);
+    if (!edge) return false;
+    const occupied = game.players.some((player) => player.shipIds.includes(edgeId));
+    if (occupied) return false;
+    if (legal.freeShipIds.includes(edgeId)) return true;
+    const ownAndSelectedShips = new Set([...self.shipIds, ...selectedRoadIds]);
+    const touchesSea = edge.hexIds.some(
+      (hexId) => game.board.hexes.find((hex) => hex.id === hexId)?.terrain === "sea",
+    );
+    if (!touchesSea) return false;
+    return edge.vertexIds.some((vertexId) => {
+      const buildingOwner = ownerAtVertex(game, vertexId);
+      if (buildingOwner === selfPlayerId) return true;
+      if (buildingOwner !== null) return false;
+      const vertex = vertexById.get(vertexId);
+      return vertex?.edgeIds.some(
+        (connectedEdgeId) =>
+          connectedEdgeId !== edgeId && ownAndSelectedShips.has(connectedEdgeId),
+      );
+    });
+  };
+
   const legalVertexIds = new Set(
     activeMode === "settlement"
       ? legal.settlementVertexIds
@@ -345,16 +387,47 @@ export default function BoardSvg({
         : [],
   );
   const legalEdgeIds = new Set(
-    activeMode === "road" ? legal.roadIds : activeMode === "free-road" ? legal.freeRoadIds : [],
+    activeMode === "road"
+      ? legal.roadIds
+      : activeMode === "free-road"
+        ? legal.freeRoadIds
+        : activeMode === "ship"
+          ? legal.shipIds
+          : [],
   );
-  const robberTargets = new Set(legal.robberHexIds);
-  const coastPath = coastlinePath(game);
+  const robberTargets = new Set(activeMode === "robber" ? legal.robberHexIds : []);
+  const pirateTargets = new Set(
+    game.phase === "pirate" && isMyTurn ? legal.pirateTargetHexIds : [],
+  );
+  const coastPath = hasSeaHexes ? "" : coastlinePath(game);
+
+  const boardBounds = (() => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const vertex of game.board.vertices) {
+      const [x, y] = project(vertex.x, vertex.y);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    const padding = 70;
+    if (!Number.isFinite(minX)) return { x: 0, y: 0, width: VIEW_WIDTH, height: VIEW_HEIGHT };
+    return {
+      x: minX - padding,
+      y: minY - padding,
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2,
+    };
+  })();
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden">
       <svg
         className="block h-full w-full"
-        viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+        viewBox={`${boardBounds.x} ${boardBounds.y} ${boardBounds.width} ${boardBounds.height}`}
         role="img"
         aria-label="Tablero de Catan"
       >
@@ -410,6 +483,14 @@ export default function BoardSvg({
             <stop offset="0" stopColor="#f0deac" />
             <stop offset="1" stopColor="#dfc98c" />
           </linearGradient>
+          <linearGradient id="terrain-gold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#8fd0c8" />
+            <stop offset="1" stopColor="#4d9f9a" />
+          </linearGradient>
+          <linearGradient id="terrain-sea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#4fb2e0" />
+            <stop offset="1" stopColor="#2f7fb4" />
+          </linearGradient>
           <filter id="tile-shadow" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="2.5" stdDeviation="2" floodColor="#533f22" floodOpacity="0.28" />
           </filter>
@@ -462,9 +543,15 @@ export default function BoardSvg({
           const [centerX, centerY] = hexCenter(hex.q, hex.r);
           const [cx, cy] = project(centerX, centerY);
           const isRobberTarget = activeMode === "robber" && isMyTurn && robberTargets.has(hex.id);
+          const isPirateTarget = isMyTurn && pirateTargets.has(hex.id);
           const pips = hex.number === null ? 0 : probabilityPips(hex.number);
           const pipColor = hex.number === 6 || hex.number === 8 ? "#c92a2a" : "#1f4d2b";
-          const tileFile = TILE_FILES[hex.terrain];
+          const tileFile =
+            hex.terrain === "sea"
+              ? SEA_TILE_FILE
+              : hex.terrain === "gold"
+                ? GOLD_TILE_FILE
+                : TILE_FILES[hex.terrain];
           const hexWidth = Math.sqrt(3) * SCALE;
           const hexHeight = 2 * SCALE;
           return (
@@ -474,8 +561,12 @@ export default function BoardSvg({
                 fill={TERRAIN_FILL[hex.terrain]}
                 stroke="none"
                 filter="url(#tile-shadow)"
-                className={isRobberTarget ? "cursor-pointer transition hover:brightness-110" : ""}
-                onClick={isRobberTarget ? () => onHexClick(hex.id) : undefined}
+                className={
+                  isRobberTarget || isPirateTarget
+                    ? "cursor-pointer transition hover:brightness-110"
+                    : ""
+                }
+                onClick={isRobberTarget || isPirateTarget ? () => onHexClick(hex.id) : undefined}
               />
               {!tileFile && (
                 <>
@@ -558,6 +649,19 @@ export default function BoardSvg({
                   />
                 </g>
               )}
+              {isPirateTarget && (
+                <g pointerEvents="none">
+                  <polygon points={pointsForHex(hex.q, hex.r, 0.92)} fill="#1d4ed8" fillOpacity="0.2" />
+                  <polygon
+                    points={pointsForHex(hex.q, hex.r, 0.92)}
+                    fill="none"
+                    stroke="#93c5fd"
+                    strokeWidth="2.6"
+                    strokeDasharray="8 6"
+                    className="animate-pulse"
+                  />
+                </g>
+              )}
               {hex.id === game.robberHexId && !robberFlight && (
                 <g filter="url(#pawn-shadow)" pointerEvents="none">
                   <image
@@ -570,9 +674,41 @@ export default function BoardSvg({
                   />
                 </g>
               )}
+              {hex.id === pirateHexId && (
+                <g filter="url(#pawn-shadow)" pointerEvents="none">
+                  <image
+                    href={PIRATE_ICON_FILE}
+                    x={cx - 26}
+                    y={cy - 30}
+                    width="52"
+                    height="52"
+                  />
+                </g>
+              )}
             </g>
           );
         })}
+
+        {game.piratePosition?.kind === "frame" && (
+          <g
+            filter="url(#pawn-shadow)"
+            pointerEvents="none"
+            transform={`translate(${boardBounds.x + 54} ${boardBounds.y + boardBounds.height - 54})`}
+          >
+            <image href={PIRATE_ICON_FILE} x={-26} y={-30} width="52" height="52" />
+            <text
+              x="0"
+              y="34"
+              textAnchor="middle"
+              fontFamily="Georgia, serif"
+              fontSize="13"
+              fontWeight="700"
+              fill="#0b3a5c"
+            >
+              marco
+            </text>
+          </g>
+        )}
 
         {robberFlight &&
           (() => {
@@ -641,19 +777,29 @@ export default function BoardSvg({
           const [x2, y2] = project(second.x, second.y);
           const ownerId = game.players.find((player) => player.roadIds.includes(edge.id))?.id;
           const owner = ownerId ? playerById.get(ownerId) : undefined;
+          const shipOwnerId = game.players.find((player) => player.shipIds.includes(edge.id))?.id;
+          const shipOwner = shipOwnerId ? playerById.get(shipOwnerId) : undefined;
           const isSelected = selectedRoadIds.includes(edge.id);
+          const isSelectedShip = selectedShipId === edge.id;
+          const isMovableShip = activeMode === "move-ship" && movableShips.has(edge.id);
+          const isMoveTarget = activeMode === "move-ship" && shipMoveTargets.has(edge.id);
           const isBuildable =
             activeMode !== null &&
             (isSelected ||
+              isMovableShip ||
               (activeMode === "road"
                 ? legalEdgeIds.has(edge.id)
                 : activeMode === "free-road"
-                  ? canPlaceFreeRoad(edge.id)
-                  : false));
+                  ? canPlaceFreeRoad(edge.id) || canPlaceFreeShip(edge.id)
+                  : activeMode === "ship"
+                    ? legalEdgeIds.has(edge.id)
+                    : false));
           const midX = (x1 + x2) / 2;
           const midY = (y1 + y2) / 2;
           const roadLength = SCALE * 0.96;
           const roadWidth = roadLength * (40 / 194);
+          const shipLength = SCALE * 0.78;
+          const shipWidth = shipLength * (90.21 / 104.43);
           const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
           return (
             <g key={edge.id}>
@@ -665,6 +811,45 @@ export default function BoardSvg({
                     y={midY - roadLength / 2}
                     width={roadWidth}
                     height={roadLength}
+                  />
+                </g>
+              )}
+              {shipOwner && (
+                <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
+                  <image
+                    href={pieceFile("ship", shipOwner.color)}
+                    x={midX - shipWidth / 2}
+                    y={midY - shipLength / 2}
+                    width={shipWidth}
+                    height={shipLength}
+                  />
+                  {isSelectedShip && (
+                    <circle cx={midX} cy={midY} r={shipWidth * 0.75} fill="#f5d35f" fillOpacity="0.35" />
+                  )}
+                </g>
+              )}
+              {isMoveTarget && (
+                <g
+                  className="cursor-pointer transition hover:brightness-110"
+                  onClick={() => onEdgeClick(edge.id)}
+                >
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#93c5fd"
+                    strokeOpacity="0.85"
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="transparent"
+                    strokeWidth="22"
                   />
                 </g>
               )}
