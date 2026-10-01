@@ -2,7 +2,17 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
-import { Dices, Eye, EyeOff, Handshake, Hourglass, Layers, Lock } from "lucide-react";
+import {
+  Dices,
+  Eye,
+  EyeOff,
+  Handshake,
+  Hourglass,
+  Layers,
+  Lock,
+  Minus,
+  Plus,
+} from "lucide-react";
 import type { BoardMode } from "./BoardSvg";
 import type { GameActionPayload, RoomSnapshot } from "../model";
 import { bundleTotal, canAfford, emptyBundle, RESOURCE_NAMES } from "./TradePanels";
@@ -66,18 +76,30 @@ const DIE_PIPS: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
-function DieFace({ value, big = false }: { value: number; big?: boolean }) {
+function DieFace({
+  value,
+  big = false,
+  rolling = false,
+}: {
+  value: number;
+  big?: boolean;
+  rolling?: boolean;
+}) {
   const pips = DIE_PIPS[value] ?? [];
   return (
     <span
-      className={`grid ${big ? "h-12 w-12" : "h-10 w-10"} grid-cols-3 grid-rows-3 place-items-center rounded-[9px] border-2 border-[#8a5a1e] bg-gradient-to-b from-white to-[#f3e7cf] p-[3px] shadow-[0_2px_0_#8a5a1e]`}
+      className={`grid ${big ? "h-14 w-14" : "h-12 w-12"} grid-cols-3 grid-rows-3 place-items-center rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-white to-[#f3e7cf] p-1 shadow-[0_3px_0_#8a5a1e] ${
+        rolling
+          ? "animate-[dice-shake_0.28s_ease-in-out_infinite]"
+          : "animate-[dice-pop_0.4s_ease-out]"
+      }`}
       title={`Dado: ${value}`}
       aria-label={`Dado: ${value}`}
     >
       {Array.from({ length: 9 }, (_, index) => (
         <span
           key={index}
-          className={`${big ? "h-[7px] w-[7px]" : "h-[6px] w-[6px]"} rounded-full bg-[#4a2c12] ${pips.includes(index) ? "" : "opacity-0"}`}
+          className={`${big ? "h-[8px] w-[8px]" : "h-[7px] w-[7px]"} rounded-full bg-[#4a2c12] ${pips.includes(index) ? "" : "opacity-0"}`}
         />
       ))}
     </span>
@@ -242,6 +264,27 @@ export default function GameActions({
     setGoldPicks([]);
   }, [pendingGold]);
 
+  const [rolling, setRolling] = useState(false);
+  const [rollFaces, setRollFaces] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    if (!rolling) {
+      setRollFaces(null);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setRollFaces([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
+    }, 110);
+    return () => window.clearInterval(timer);
+  }, [rolling]);
+
+  const rollDice = () => {
+    if (rolling || busy) return;
+    setRolling(true);
+    window.setTimeout(() => setRolling(false), 1_350);
+    void onAction({ type: "roll" });
+  };
+
   const toggleMode = (next: BoardMode) => {
     onSelectedCard(null);
     onModeChange(mode === next ? null : next);
@@ -319,40 +362,41 @@ export default function GameActions({
                 {game.self.developmentCards.map((card) => {
                   const playable = isCardPlayable(card);
                   const selected = selectedCard?.id === card.id;
+                  const title =
+                    card.type === "victory-point"
+                      ? "Punto de victoria secreto · +1 PV"
+                      : card.boughtOnTurn >= game.turnNumber
+                        ? `${CARD_NAMES[card.type]} · comprada este turno`
+                        : `${CARD_NAMES[card.type]} · tocar la carta para jugarla`;
                   return (
-                    <span
+                    <button
                       key={card.id}
-                      className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 ${
-                        selected ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#c9a86a] bg-[#fdf6e3]"
+                      type="button"
+                      title={title}
+                      disabled={!playable || busy}
+                      onClick={() => onSelectedCard(card)}
+                      className={`flex items-center gap-1 rounded-xl border-2 px-1 py-0.5 transition ${
+                        selected
+                          ? "border-[#d9a44a] bg-[#ffe9b8] ring-2 ring-[#d9a44a]/60"
+                          : "border-[#c9a86a] bg-[#fdf6e3]"
+                      } ${
+                        playable
+                          ? "cursor-pointer enabled:hover:-translate-y-0.5 enabled:hover:brightness-105"
+                          : "cursor-not-allowed opacity-60 saturate-50"
                       }`}
                     >
                       <img
                         className="h-8 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
                         src={DEV_CARD_FILES[card.type]}
                         alt={CARD_NAMES[card.type]}
-                        title={CARD_NAMES[card.type]}
                         draggable={false}
                       />
                       {card.type === "victory-point" ? (
-                        <span
-                          className="pr-1 text-[9px] font-bold text-[#8a6a3a]"
-                          title="Solo vos podés verla; cuenta +1 punto"
-                        >
-                          Secreta · +1 PV
-                        </span>
+                        <span className="pr-1 text-[9px] font-bold text-[#8a6a3a]">+1 PV</span>
                       ) : card.boughtOnTurn >= game.turnNumber ? (
                         <span className="pr-1 text-[9px] font-bold text-[#a08a5e]">Nueva</span>
-                      ) : (
-                        <button
-                          className="rounded-lg border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-1.5 py-0.5 font-display text-[10px] font-extrabold text-[#4a2c12] shadow-[0_2px_0_#8a5a1e] disabled:cursor-not-allowed disabled:opacity-50"
-                          type="button"
-                          disabled={!playable || busy}
-                          onClick={() => onSelectedCard(card)}
-                        >
-                          Jugar
-                        </button>
-                      )}
-                    </span>
+                      ) : null}
+                    </button>
                   );
                 })}
               </div>
@@ -373,14 +417,27 @@ export default function GameActions({
               ? "Tu turno"
               : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </div>
-          {game.lastRoll ? (
+          {rolling || game.lastRoll ? (
             <div
-              className={`flex items-center gap-1.5 ${
-                readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
+              className={`flex items-center gap-2 ${
+                !rolling && readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
               }`}
             >
-              <DieFace value={game.lastRoll.dice[0]} big={readyToRoll} />
-              <DieFace value={game.lastRoll.dice[1]} big={readyToRoll} />
+              <DieFace
+                value={rolling ? rollFaces?.[0] ?? 1 : game.lastRoll?.dice[0] ?? 1}
+                big={readyToRoll || rolling}
+                rolling={rolling}
+              />
+              <DieFace
+                value={rolling ? rollFaces?.[1] ?? 1 : game.lastRoll?.dice[1] ?? 1}
+                big={readyToRoll || rolling}
+                rolling={rolling}
+              />
+              {!rolling && game.lastRoll && (
+                <span className="font-display text-xl font-black text-[#4a2c12]">
+                  = {game.lastRoll.total}
+                </span>
+              )}
             </div>
           ) : (
             <span
@@ -393,12 +450,12 @@ export default function GameActions({
           )}
           {isMyTurn && game.phase === "awaiting-roll" ? (
             <button
-              className="inline-flex min-h-[32px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-3 font-display text-xs font-extrabold text-[#4a2c12] shadow-[0_3px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5 disabled:opacity-50"
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-4 font-display text-sm font-extrabold text-[#4a2c12] shadow-[0_3px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5 disabled:opacity-50"
               type="button"
-              disabled={busy}
-              onClick={() => void onAction({ type: "roll" })}
+              disabled={busy || rolling}
+              onClick={rollDice}
             >
-              <Dices size={14} /> Tirar
+              <Dices size={16} /> {rolling ? "Tirando…" : "Tirar dados"}
             </button>
           ) : isMyTurn && game.phase === "activate" ? (
             <span className="flex flex-wrap items-center justify-center gap-1.5">
@@ -553,52 +610,81 @@ export default function GameActions({
               </h2>
             </div>
             <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
-              Elegí qué recursos devolver al banco para poder mover al ladrón.
+              Sumá y restá cartas hasta devolver exactamente {pendingCount}.
             </p>
-            <div className="mt-3">
-              {RESOURCES.map((resource) => (
-                <label
-                  key={resource}
-                  className="mt-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-[#7a5320]"
-                >
-                  <span className="flex items-center gap-2">
+            <div className="mt-3 grid gap-2">
+              {RESOURCES.map((resource) => {
+                const amount = discard[resource];
+                const owned = game.self.resources[resource];
+                const stepClass =
+                  "grid h-9 w-9 place-items-center rounded-full border-2 transition disabled:cursor-not-allowed disabled:opacity-35";
+                return (
+                  <div
+                    key={resource}
+                    className={`flex items-center gap-3 rounded-2xl border-2 px-3 py-1.5 transition ${
+                      amount > 0 ? "border-[#d9a44a] bg-[#ffe9b8]" : "border-[#e3cfa5] bg-[#fffaf0]"
+                    }`}
+                  >
                     <img
-                      className="h-9 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                      className={`h-10 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${
+                        owned === 0 ? "opacity-30 saturate-0" : ""
+                      }`}
                       src={RESOURCE_CARD_FILES[resource]}
                       alt=""
                       draggable={false}
                     />
-                    {RESOURCE_NAMES[resource]}{" "}
-                    <small>({game.self.resources[resource]})</small>
-                  </span>
-                  <input
-                    className="w-[58px] rounded-xl border-2 border-[#c9a86a] bg-[#fffaf0] px-2 py-1 text-center font-bold text-[#4a2c12] outline-none focus:border-[#a9793a]"
-                    type="number"
-                    min={0}
-                    max={game.self.resources[resource]}
-                    value={discard[resource]}
-                    onChange={(event) =>
-                      setDiscardAmount(
-                        resource,
-                        Math.min(
-                          game.self.resources[resource],
-                          Math.max(0, Number(event.target.value)),
-                        ),
-                      )
-                    }
-                  />
-                </label>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-sm font-extrabold text-[#4a2c12]">
+                        {RESOURCE_NAMES[resource]}
+                      </p>
+                      <p className="text-[10px] font-bold text-[#a08a5e]">Tenés {owned}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className={`${stepClass} border-[#a4462f] bg-[#f6dcd6] text-[#8a3a22] shadow-[0_2px_0_#a4462f] enabled:hover:brightness-105 enabled:active:translate-y-0.5`}
+                        disabled={amount <= 0}
+                        aria-label={`Quitar ${RESOURCE_NAMES[resource]}`}
+                        onClick={() => setDiscardAmount(resource, amount - 1)}
+                      >
+                        <Minus size={15} />
+                      </button>
+                      <span className="w-7 text-center font-display text-xl font-extrabold text-[#4a2c12]">
+                        {amount}
+                      </span>
+                      <button
+                        type="button"
+                        className={`${stepClass} border-[#4a6b28] bg-[#e4f0cf] text-[#4a6b28] shadow-[0_2px_0_#4a6b28] enabled:hover:brightness-105 enabled:active:translate-y-0.5`}
+                        disabled={amount >= owned}
+                        aria-label={`Agregar ${RESOURCE_NAMES[resource]}`}
+                        onClick={() => setDiscardAmount(resource, amount + 1)}
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div
-              className={`mt-3 text-xs font-bold ${
-                discardTotal === pendingCount ? "text-[#4a6b28]" : "text-[#a4462f]"
-              }`}
-            >
-              Seleccionadas: {discardTotal} / {pendingCount}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#e3cfa5]">
+                <span
+                  className={`block h-full rounded-full transition-all ${
+                    discardTotal === pendingCount ? "bg-[#7fb04a]" : "bg-[#e0a53c]"
+                  }`}
+                  style={{ width: `${Math.min(100, (discardTotal / pendingCount) * 100)}%` }}
+                />
+              </span>
+              <span
+                className={`font-display text-sm font-extrabold ${
+                  discardTotal === pendingCount ? "text-[#4a6b28]" : "text-[#8a6a1a]"
+                }`}
+              >
+                {discardTotal} / {pendingCount}
+              </span>
             </div>
             {discardSubmitted && discardTotal !== pendingCount && (
-              <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#8a6a3a]">
+              <p className="mt-2 text-xs font-semibold leading-[1.5] text-[#a4462f]">
                 Elegí exactamente {pendingCount} cartas.
               </p>
             )}
@@ -609,7 +695,7 @@ export default function GameActions({
                 disabled={busy || discardTotal !== pendingCount}
                 onClick={submitDiscard}
               >
-                Descartar
+                Descartar {discardTotal > 0 ? discardTotal : ""}
               </button>
             </div>
           </section>
