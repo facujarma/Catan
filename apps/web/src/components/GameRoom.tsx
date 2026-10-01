@@ -11,7 +11,7 @@ import BoardSvg, { type BoardMode } from "./BoardSvg";
 import FeedPanel from "./FeedPanel";
 import GameActions from "./GameActions";
 import GameStats from "./GameStats";
-import { Crown, Landmark, LogOut, Settings, UserPlus } from "lucide-react";
+import { Clock, Crown, Landmark, LogOut, Settings, UserPlus } from "lucide-react";
 import { RESOURCE_NAMES, TradeComposer, TradeOfferPanel } from "./TradePanels";
 import {
   BANK_FILE,
@@ -248,14 +248,14 @@ export default function GameRoom({
           resource: resources[index] ?? resources[0] ?? "wood",
           from: { x: bankRect.left + bankRect.width / 2, y: bankRect.top + bankRect.height / 2 },
           to: { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 },
-          delay: index * 110,
+          delay: index * 220,
         });
       }
     }
 
     if (flights.length === 0) return;
     setFlyingCards(flights);
-    const total = 1_000 + Math.max(...flights.map((flight) => flight.delay));
+    const total = 1_900 + Math.max(...flights.map((flight) => flight.delay));
     const timer = window.setTimeout(() => setFlyingCards([]), total);
     return () => window.clearTimeout(timer);
   }, [game.players, game.lastRoll]);
@@ -363,9 +363,6 @@ export default function GameRoom({
               ? "Tu turno"
               : `Turno de ${currentIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
           </span>
-          {!paused && game.phase !== "finished" && room.turnDeadlineAt !== null && (
-            <TurnTimer deadlineAt={room.turnDeadlineAt} />
-          )}
           {paused && (
             <span className="rounded-full border-2 border-[#7a5a3a] bg-[#3c2415] px-2.5 py-[2px] text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#ffd76a]">
               ⏸ En pausa
@@ -443,6 +440,15 @@ export default function GameRoom({
 
           {alarmActive && (
             <div className="alarm-overlay pointer-events-none absolute inset-0 z-[4] rounded-2xl" />
+          )}
+
+          {game.phase !== "finished" && room.turnDeadlineAt !== null && (
+            <TurnClock
+              deadlineAt={room.turnDeadlineAt}
+              totalMs={room.turnTimeLimitSeconds * 1000}
+              isMyTurn={isMyTurn}
+              paused={paused}
+            />
           )}
 
           {paused && (
@@ -884,17 +890,6 @@ export default function GameRoom({
         </div>
       )}
 
-      {selfResourceCount >= 8 && (
-        <div className="fixed bottom-3 left-3 z-[70] animate-pulse rounded-2xl border-2 border-[#a4462f] bg-[#f6dcd6] px-3 py-2 shadow-[0_4px_0_rgba(74,44,18,0.25)]">
-          <p className="font-display text-xs font-extrabold text-[#8a3a22]">
-            🖐 Tenés {selfResourceCount} cartas
-          </p>
-          <p className="text-[10px] font-bold text-[#a4462f]">
-            Si sale 7 descartás {Math.floor(selfResourceCount / 2)}
-          </p>
-        </div>
-      )}
-
       {statsOpen && game.phase === "finished" && (
         <GameStats
           game={game}
@@ -909,7 +904,7 @@ export default function GameRoom({
           {flyingCards.map((card) => (
             <img
               key={card.id}
-              className="absolute h-9 w-auto animate-[card-fly_0.85s_ease-in_forwards] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
+              className="absolute h-11 w-auto animate-[card-fly_1.7s_ease-in-out_forwards] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
               style={
                 {
                   left: card.from.x,
@@ -1103,30 +1098,71 @@ function formatDuration(ms: number): string {
   return `${minutes} min ${String(seconds % 60).padStart(2, "0")} s`;
 }
 
-function TurnTimer({ deadlineAt }: { deadlineAt: number }) {
+function TurnClock({
+  deadlineAt,
+  totalMs,
+  isMyTurn,
+  paused,
+}: {
+  deadlineAt: number;
+  totalMs: number;
+  isMyTurn: boolean;
+  paused: boolean;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, [deadlineAt]);
 
   const remainingMs = Math.max(0, deadlineAt - now);
   const totalSeconds = Math.ceil(remainingMs / 1000);
-  const urgent = remainingMs <= 10_000;
   const label = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+  const ratio = totalMs > 0 ? Math.max(0, Math.min(1, remainingMs / totalMs)) : 0;
+  const urgent = remainingMs <= 10_000;
+  const warning = remainingMs <= 25_000;
+  const tone = urgent
+    ? { text: "text-[#a4462f]", ring: "#d64545", border: "border-[#a4462f]", bg: "bg-[#f6dcd6]" }
+    : warning
+      ? { text: "text-[#8a6a1a]", ring: "#e0a53c", border: "border-[#d9a44a]", bg: "bg-[#ffe9b8]" }
+      : { text: "text-[#4a6b28]", ring: "#7fb04a", border: "border-[#8a9a5a]", bg: "bg-[#eef4dc]" };
+  const circumference = 2 * Math.PI * 16;
 
   return (
-    <span
-      className={`rounded-full border-2 px-2.5 py-[2px] font-mono text-[11px] font-bold ${
-        urgent
-          ? "border-[#a4462f] bg-[#f6dcd6] text-[#8a3a22]"
-          : "border-[#d9a44a] bg-[#ffe9b8] text-[#7a5320]"
-      }`}
+    <div
+      className={`pointer-events-none absolute right-3 top-3 z-[8] flex items-center gap-2.5 rounded-2xl border-2 px-3 py-1.5 shadow-[0_4px_0_rgba(74,44,18,0.3),0_10px_24px_rgba(10,20,30,0.3)] ${tone.border} ${tone.bg} ${
+        urgent && isMyTurn && !paused ? "animate-pulse" : ""
+      } ${paused ? "opacity-80" : ""}`}
       title="Tiempo restante del turno"
     >
-      ⏱ {label}
-    </span>
+      <span className="relative grid h-11 w-11 shrink-0 place-items-center">
+        <svg viewBox="0 0 40 40" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle cx="20" cy="20" r="16" fill="none" stroke="#e3cfa5" strokeWidth="5" />
+          <circle
+            cx="20"
+            cy="20"
+            r="16"
+            fill="none"
+            stroke={tone.ring}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={`${ratio * circumference} ${circumference}`}
+          />
+        </svg>
+        <Clock size={15} className={tone.text} />
+      </span>
+      <span className="flex flex-col">
+        <span
+          className={`font-display text-[26px] font-black leading-none tabular-nums ${tone.text}`}
+        >
+          {paused ? "⏸" : label}
+        </span>
+        <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#8a6a3a]">
+          {isMyTurn ? "Tu tiempo" : "Tiempo del turno"}
+        </span>
+      </span>
+    </div>
   );
 }
 

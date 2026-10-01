@@ -276,6 +276,8 @@ export default function BoardSvg({
   const isMyTurn = game.currentPlayerId === selfPlayerId;
   const rolledTotal = game.lastRoll?.total ?? null;
   const rollKey = game.lastRoll ? `${game.lastRoll.dice[0]}-${game.lastRoll.dice[1]}` : null;
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
   const lastRollKeyRef = useRef<string | null>(rollKey);
   const [robberFlight, setRobberFlight] = useState<{ from: string; to: string; key: number } | null>(
@@ -611,10 +613,10 @@ export default function BoardSvg({
           const ux = midpointX / distance;
           const uy = midpointY / distance;
           const rotation = (Math.atan2(uy, ux) * 180) / Math.PI + 90;
-          const [iconX, iconY] = project(midpointX + ux * 0.52, midpointY + uy * 0.52);
+          const [iconX, iconY] = project(midpointX + ux * 0.55, midpointY + uy * 0.55);
           const iconFile =
             port.type === "generic" ? GENERIC_PORT_FILE : RESOURCE_PORT_FILES[port.type];
-          const size = 56;
+          const size = 78;
           return (
             <g
               key={port.id}
@@ -642,6 +644,7 @@ export default function BoardSvg({
           const ownerId = game.players.find((player) => player.roadIds.includes(edge.id))?.id;
           const owner = ownerId ? playerById.get(ownerId) : undefined;
           const isSelected = selectedRoadIds.includes(edge.id);
+          const isHovered = hoveredEdgeId === edge.id;
           const isBuildable =
             activeMode !== null &&
             (isSelected ||
@@ -670,17 +673,34 @@ export default function BoardSvg({
               )}
               {isBuildable && (
                 <g
-                  className="cursor-pointer transition hover:brightness-110"
+                  className="cursor-pointer"
                   onClick={() => onEdgeClick(edge.id)}
+                  onMouseEnter={() => setHoveredEdgeId(edge.id)}
+                  onMouseLeave={() =>
+                    setHoveredEdgeId((current) => (current === edge.id ? null : current))
+                  }
                 >
+                  {(isSelected || isHovered) && (
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="#ffe08a"
+                      strokeOpacity={isHovered ? 0.75 : 0.5}
+                      strokeWidth={isHovered ? 28 : 22}
+                      strokeLinecap="round"
+                      className={isHovered ? "animate-pulse" : ""}
+                    />
+                  )}
                   <line
                     x1={x1}
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke={isSelected ? "#f5d35f" : "#ffffff"}
-                    strokeOpacity={isSelected ? 0.55 : 0.3}
-                    strokeWidth="17"
+                    stroke={isSelected || isHovered ? "#f5d35f" : "#ffffff"}
+                    strokeOpacity={isSelected || isHovered ? 0.65 : 0.3}
+                    strokeWidth={isHovered ? 20 : 17}
                     strokeLinecap="round"
                   />
                   <line
@@ -688,9 +708,9 @@ export default function BoardSvg({
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke={isSelected ? "#f5d35f" : "#f3c93f"}
-                    strokeWidth={isSelected ? 9 : 6.5}
-                    strokeDasharray={isSelected ? undefined : "7 7"}
+                    stroke={isSelected || isHovered ? "#ffd76a" : "#f3c93f"}
+                    strokeWidth={isSelected || isHovered ? 9.5 : 6.5}
+                    strokeDasharray={isSelected || isHovered ? undefined : "7 7"}
                     strokeLinecap="round"
                   />
                   <line
@@ -699,7 +719,7 @@ export default function BoardSvg({
                     x2={x2}
                     y2={y2}
                     stroke="transparent"
-                    strokeWidth="22"
+                    strokeWidth="28"
                   />
                 </g>
               )}
@@ -736,22 +756,33 @@ export default function BoardSvg({
               )}
               {isBuildable && isMyTurn && (
                 <g
-                  className="cursor-pointer transition hover:brightness-105"
+                  className="cursor-pointer"
                   onClick={() => onVertexClick(vertex.id)}
+                  onMouseEnter={() => setHoveredVertexId(vertex.id)}
+                  onMouseLeave={() =>
+                    setHoveredVertexId((current) => (current === vertex.id ? null : current))
+                  }
                   aria-label={activeMode === "city" ? "Mejorar a ciudad" : "Construir poblado"}
                 >
                   <circle
                     cx={cx}
                     cy={cy}
-                    r="18"
-                    fill="none"
+                    r={hoveredVertexId === vertex.id ? 23 : 18}
+                    fill={hoveredVertexId === vertex.id ? "#ffe08a" : "none"}
+                    fillOpacity="0.35"
                     stroke="#ffe08a"
-                    strokeWidth="2.6"
+                    strokeWidth={hoveredVertexId === vertex.id ? 4.5 : 2.6}
                     strokeDasharray="5 5"
                     className="animate-pulse"
                   />
                   {activeMode === "settlement" ? (
-                    <g>
+                    <g
+                      transform={
+                        hoveredVertexId === vertex.id
+                          ? `translate(${cx} ${cy}) scale(1.2) translate(${-cx} ${-cy})`
+                          : undefined
+                      }
+                    >
                       <path
                         d={`M${cx - 8} ${cy + 7} V${cy - 1} H${cx + 8} V${cy + 7} Z`}
                         fill="#ffffff"
@@ -768,9 +799,17 @@ export default function BoardSvg({
                       />
                     </g>
                   ) : (
-                    <circle cx={cx} cy={cy} r="11" fill="#fff3c4" fillOpacity="0.6" stroke="#ffffff" strokeWidth="1.6" />
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={hoveredVertexId === vertex.id ? 14 : 11}
+                      fill="#fff3c4"
+                      fillOpacity={hoveredVertexId === vertex.id ? 0.85 : 0.6}
+                      stroke="#ffffff"
+                      strokeWidth="1.6"
+                    />
                   )}
-                  <circle cx={cx} cy={cy} r="22" fill="transparent" />
+                  <circle cx={cx} cy={cy} r="26" fill="transparent" />
                 </g>
               )}
             </g>
