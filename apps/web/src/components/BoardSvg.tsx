@@ -803,7 +803,7 @@ export default function BoardSvg({
           const midY = (y1 + y2) / 2;
           const roadLength = SCALE * 0.96;
           const roadWidth = roadLength * (40 / 194);
-          const shipLength = SCALE * 0.78;
+          const shipLength = SCALE * 0.58;
           const shipWidth = shipLength * (90.21 / 104.43);
           const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
           return (

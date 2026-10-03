@@ -9,6 +9,13 @@ const sourceByPiece: Record<(typeof pieces)[number], string> = {
   city: "city_gold.svg",
   ship: "ship_north_west.svg",
 };
+// Los barcos usan un ramp mas saturado para que el color del jugador se note.
+const rampByPiece: Record<(typeof pieces)[number], { dark: number; light: number }> = {
+  road: { dark: -0.55, light: 0.62 },
+  settlement: { dark: -0.55, light: 0.62 },
+  city: { dark: -0.55, light: 0.62 },
+  ship: { dark: -0.5, light: 0.3 },
+};
 const players: Record<string, string> = {
   red: "#d94b3d",
   blue: "#3c78c5",
@@ -63,13 +70,29 @@ function luminance(hex: string): number {
   return (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
 }
 
+function expandShorthand(hex: string): string {
+  const raw = hex.slice(1).toLowerCase();
+  if (raw.length === 6) return `#${raw}`;
+  return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`;
+}
+
+function colorVariants(hex: string): string[] {
+  const raw = hex.slice(1);
+  if (raw[0] === raw[1] && raw[2] === raw[3] && raw[4] === raw[5]) {
+    return [hex, `#${raw[0]}${raw[2]}${raw[4]}`];
+  }
+  return [hex];
+}
+
+const HEX_PATTERN = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
+
 for (const [name, player] of Object.entries(players)) {
-  const dark = shade(player, -0.55);
-  const light = shade(player, 0.62);
   mkdirSync(join(root, "pieces", name), { recursive: true });
   for (const piece of pieces) {
+    const dark = shade(player, rampByPiece[piece].dark);
+    const light = shade(player, rampByPiece[piece].light);
     const svg = readFileSync(join(root, sourceByPiece[piece]), "utf8");
-    const palette = [...new Set(svg.match(/#[0-9a-fA-F]{6}/g) ?? [])].filter(
+    const palette = [...new Set((svg.match(HEX_PATTERN) ?? []).map(expandShorthand))].filter(
       (color) => saturation(color) >= 0.2,
     );
     const values = palette.map(luminance);
@@ -80,7 +103,9 @@ for (const [name, player] of Object.entries(players)) {
       const t = (luminance(color) - min) / (max - min || 1);
       const target =
         t < 0.5 ? mix(dark, player, t * 2) : mix(player, light, (t - 0.5) * 2);
-      recolored = recolored.replaceAll(new RegExp(color, "gi"), target);
+      for (const variant of colorVariants(color)) {
+        recolored = recolored.replaceAll(new RegExp(`${variant}\\b`, "gi"), target);
+      }
     }
     writeFileSync(join(root, "pieces", name, `${piece}.svg`), recolored);
   }

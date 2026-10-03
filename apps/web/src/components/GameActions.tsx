@@ -510,7 +510,7 @@ export default function GameActions({
                 disabled={busy || room.legal.shipIds.length === 0}
                 onClick={() => onModeChange("ship")}
               >
-                <img className="h-5 w-auto" src={pieceFile("ship", selfColor)} alt="" />
+                <img className="h-4 w-auto" src={pieceFile("ship", selfColor)} alt="" />
                 Barco
               </button>
             </span>
@@ -595,7 +595,7 @@ export default function GameActions({
           <ActionButton
             icon={
               <img
-                className="h-6 w-auto"
+                className="h-5 w-auto"
                 src={pieceFile("ship", selfColor)}
                 alt=""
                 draggable={false}
@@ -609,7 +609,7 @@ export default function GameActions({
             onClick={() => toggleMode("ship")}
           />
           <ActionButton
-            icon={<img className="h-6 w-auto" src={pieceFile("ship", selfColor)} alt="" draggable={false} />}
+            icon={<img className="h-5 w-auto" src={pieceFile("ship", selfColor)} alt="" draggable={false} />}
             label="Mover"
             title="Mover un barco (una vez por turno)"
             active={mode === "move-ship"}
