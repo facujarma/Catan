@@ -435,3 +435,81 @@ describe("costas contra el marco", () => {
     ).toThrow();
   });
 });
+
+describe("movimiento de barcos", () => {
+  test("no se puede mover un barco usando su propia arista como conexion", () => {
+    const state = toMain(setupScenarioGame(3));
+    const player = state.players[0]!;
+    const edgeById = new Map(state.board.edges.map((edge) => [edge.id, edge]));
+    const vertexById = new Map(state.board.vertices.map((vertex) => [vertex.id, vertex]));
+    const isWater = (edgeId: string): boolean => {
+      const edge = edgeById.get(edgeId)!;
+      return (
+        edge.hexIds.some(
+          (hexId) => state.board.hexes.find((hex) => hex.id === hexId)?.terrain === "sea",
+        ) || edge.hexIds.length < 2
+      );
+    };
+
+    let found: { a: string; b: string; c: string; d: string } | null = null;
+    for (const settlementVertexId of player.settlements) {
+      const settlementVertex = vertexById.get(settlementVertexId)!;
+      for (const aId of settlementVertex.edgeIds.filter(isWater)) {
+        const a = edgeById.get(aId)!;
+        const v1 = a.vertexIds.find((id) => id !== settlementVertexId)!;
+        for (const bId of vertexById.get(v1)!.edgeIds.filter((id) => id !== aId && isWater(id))) {
+          const b = edgeById.get(bId)!;
+          const v2 = b.vertexIds.find((id) => id !== v1)!;
+          for (const cId of vertexById.get(v2)!.edgeIds.filter((id) => id !== bId && isWater(id))) {
+            const c = edgeById.get(cId)!;
+            if (c.vertexIds.some((id) => a.vertexIds.includes(id))) continue;
+            const d = settlementVertex.edgeIds.find((id) => {
+              if (id === aId || id === bId || !isWater(id)) return false;
+              const edge = edgeById.get(id)!;
+              return !edge.vertexIds.some((vid) => b.vertexIds.includes(vid));
+            });
+            if (!d) continue;
+            found = { a: aId, b: bId, c: cId, d };
+            break;
+          }
+          if (found) break;
+        }
+        if (found) break;
+      }
+      if (found) break;
+    }
+    expect(found).not.toBeNull();
+    const { a, b, c, d } = found!;
+
+    const stateWithShips: GameState = {
+      ...state,
+      movedShipThisTurn: false,
+      shipsBuiltThisTurn: [],
+      players: state.players.map((candidate, index) =>
+        index === 0 ? { ...candidate, ships: [a, b] } : candidate,
+      ),
+    };
+
+    const targets = getLegalShipMoveTargets(stateWithShips, "p1", b);
+    expect(targets).not.toContain(c);
+    expect(targets).toContain(d);
+
+    expect(() =>
+      applyAction(stateWithShips, {
+        type: "move-ship",
+        playerId: "p1",
+        fromEdgeId: b,
+        toEdgeId: c,
+      }),
+    ).toThrow(/conectado a tu red/i);
+
+    const moved = applyAction(stateWithShips, {
+      type: "move-ship",
+      playerId: "p1",
+      fromEdgeId: b,
+      toEdgeId: d,
+    });
+    expect(moved.players[0]!.ships).toContain(d);
+    expect(moved.players[0]!.ships).not.toContain(b);
+  });
+});

@@ -572,8 +572,19 @@ export function getLegalShipMoveTargets(
   fromEdgeId: string,
 ): string[] {
   if (!getMovableShipIds(state, playerId).includes(fromEdgeId)) return [];
+  // El barco se retira antes de validar el destino: su arista no cuenta como conexion.
+  const withoutOrigin: GameState = {
+    ...state,
+    players: state.players.map((player) =>
+      player.id === playerId
+        ? { ...player, ships: player.ships.filter((edgeId) => edgeId !== fromEdgeId) }
+        : player,
+    ),
+  };
   return state.board.edges
-    .filter((edge) => edge.id !== fromEdgeId && canPlaceShipOnBoard(state, playerId, edge.id))
+    .filter(
+      (edge) => edge.id !== fromEdgeId && canPlaceShipOnBoard(withoutOrigin, playerId, edge.id),
+    )
     .map((edge) => edge.id);
 }
 
@@ -1241,11 +1252,20 @@ function moveShip(
       "Ese barco no puede moverse: puede estar recién construido, bloqueado o junto al pirata.",
     );
   }
-  if (fromEdgeId === toEdgeId || !canPlaceShipOnBoard(state, playerId, toEdgeId)) {
+  if (fromEdgeId === toEdgeId) {
     fail("ILLEGAL_PLACEMENT", "El destino del barco no es válido.");
   }
 
+  // Se retira el barco antes de validar el destino: su propia arista no
+  // puede usarse como conexion (evita "saltar" desconectando la linea).
   player.ships = player.ships.filter((edgeId) => edgeId !== fromEdgeId);
+  if (!canPlaceShipOnBoard(state, playerId, toEdgeId)) {
+    fail(
+      "ILLEGAL_PLACEMENT",
+      "El destino del barco no está conectado a tu red de barcos o construcciones.",
+    );
+  }
+
   player.ships.push(toEdgeId);
   state.movedShipThisTurn = true;
   recalculateAwards(state);
