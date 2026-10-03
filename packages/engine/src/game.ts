@@ -338,8 +338,16 @@ function hasRouteOnEdge(state: GameState, edgeId: string): boolean {
   return getRoadOwner(state, edgeId) !== null || getShipOwner(state, edgeId) !== null;
 }
 
-function isSeaEdge(state: GameState, edge: Edge): boolean {
-  return edge.hexIds.some((hexId) => getHex(state, hexId)?.terrain === "sea");
+function shipsInPlay(state: GameState): boolean {
+  return state.scenarioId !== "base";
+}
+
+// Arista de agua: tiene un hexagono de mar o es borde del tablero.
+// En Navegantes, la costa contra el marco cuenta como agua aunque no
+// exista una casilla de mar contigua.
+function isWaterEdge(state: GameState, edge: Edge): boolean {
+  if (edge.hexIds.some((hexId) => getHex(state, hexId)?.terrain === "sea")) return true;
+  return edge.hexIds.length < 2;
 }
 
 function isLandEdge(state: GameState, edge: Edge): boolean {
@@ -431,9 +439,10 @@ function canPlaceShipOnBoard(
   edgeId: string,
   setupVertexId: string | null = null,
 ): boolean {
+  if (!shipsInPlay(state)) return false;
   const edge = state.board.edges.find((candidate) => candidate.id === edgeId);
   if (!edge || hasRouteOnEdge(state, edgeId)) return false;
-  if (!isSeaEdge(state, edge)) return false;
+  if (!isWaterEdge(state, edge)) return false;
   if (edgeTouchesPirate(state, edge)) return false;
 
   if (setupVertexId !== null) return edge.vertexIds.includes(setupVertexId);

@@ -313,7 +313,9 @@ export default function BoardSvg({
       ? game.phase === "setup-settlement"
         ? "settlement"
         : game.phase === "setup-road"
-          ? "road"
+          ? mode === "ship"
+            ? "ship"
+            : "road"
           : "robber"
       : game.phase === "main" && isMyTurn
         ? mode

@@ -136,19 +136,6 @@ describe("escenario 1: Rumbo a nuevas costas", () => {
       }
       expect(seen.size).toBe(board.hexes.length);
 
-      const land = board.hexes.filter((hex) => hex.terrain !== "sea");
-      for (const hex of land) {
-        const touchesWater = directions.some(([dq, dr]) => {
-          const neighbor = byId.get(`h-${hex.q + dq}-${hex.r + dr}`);
-          return neighbor?.terrain === "sea";
-        });
-        const isInterior =
-          directions.every(([dq, dr]) => {
-            const neighbor = byId.get(`h-${hex.q + dq}-${hex.r + dr}`);
-            return neighbor !== undefined && neighbor.terrain !== "sea";
-          }) && directions.every(([dq, dr]) => byId.has(`h-${hex.q + dq}-${hex.r + dr}`));
-        expect(touchesWater || isInterior).toBe(true);
-      }
     }
   });
 
@@ -257,6 +244,17 @@ describe("reglas de Navegantes en el escenario 1", () => {
   test("un 7 permite elegir entre el ladrón y el pirata, y el pirata roba por barco", () => {
     let state = setupScenarioGame(3);
     state = withResources(state, { p2: { wood: 3 } });
+    state = {
+      ...state,
+      players: state.players.map((player, index) =>
+        index === 1
+          ? {
+              ...player,
+              resources: { wood: 3, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+            }
+          : player,
+      ),
+    };
 
     const pirateHex = state.piratePosition?.kind === "hex" ? state.piratePosition.hexId : null;
     const targetEdge = state.board.edges.find(
@@ -370,5 +368,70 @@ describe("reglas de Navegantes en el escenario 1", () => {
         vertexId: islandVertex.id,
       }),
     ).toThrow(/conectarse a un camino o barco y respetar la distancia/i);
+  });
+});
+
+describe("costas contra el marco", () => {
+  test("en Navegantes se puede construir un barco en una costa contra el marco", () => {
+    const base = createGame({
+      players: playerConfigs(3),
+      seed: "marco-navegantes",
+      scenarioId: SCENARIO,
+      setupMode: "fixed",
+    });
+    const borderEdge = base.board.edges.find(
+      (edge) =>
+        edge.hexIds.length === 1 &&
+        base.board.hexes.find((hex) => hex.id === edge.hexIds[0])?.terrain !== "sea",
+    );
+    expect(borderEdge).toBeDefined();
+    const vertexId = borderEdge!.vertexIds[0];
+    const state: GameState = {
+      ...base,
+      phase: "main",
+      hasRolled: true,
+      turnNumber: 3,
+      players: base.players.map((player, index) =>
+        index === 0
+          ? {
+              ...player,
+              settlements: [vertexId],
+              resources: { wood: 3, brick: 3, sheep: 3, wheat: 3, ore: 3 },
+            }
+          : player,
+      ),
+    };
+
+    expect(getLegalShipPlacements(state, "p1")).toContain(borderEdge!.id);
+    const built = applyAction(state, {
+      type: "build-ship",
+      playerId: "p1",
+      edgeId: borderEdge!.id,
+    });
+    expect(built.players[0]!.ships).toContain(borderEdge!.id);
+  });
+
+  test("en Catan base los barcos no estan disponibles", () => {
+    const base = createGame({ players: playerConfigs(3), seed: "marco-base" });
+    const borderEdge = base.board.edges.find((edge) => edge.hexIds.length === 1)!;
+    const state: GameState = {
+      ...base,
+      phase: "main",
+      hasRolled: true,
+      turnNumber: 3,
+      players: base.players.map((player, index) =>
+        index === 0
+          ? {
+              ...player,
+              settlements: [borderEdge.vertexIds[0]],
+              resources: { wood: 3, brick: 3, sheep: 3, wheat: 3, ore: 3 },
+            }
+          : player,
+      ),
+    };
+    expect(getLegalShipPlacements(state, "p1")).toEqual([]);
+    expect(() =>
+      applyAction(state, { type: "build-ship", playerId: "p1", edgeId: borderEdge.id }),
+    ).toThrow();
   });
 });

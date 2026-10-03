@@ -88,14 +88,22 @@ function waterCells(
 const SEA_3P: Array<[number, number]> = waterCells(LAND_3P, BOARD_ROWS_3P);
 
 const PORTS_3P: ScenarioPortSpec[] = [
-  { q: -1, r: -1, side: 2, type: "brick", ratio: 2 },
+  // O de 4 (trigo) -> puerto de trigo
+  { q: -1, r: -1, side: 2, type: "wheat", ratio: 2 },
+  // E de 6 (ovino) -> 3:1
   { q: 0, r: -1, side: 5, type: "generic", ratio: 3 },
-  { q: -2, r: 0, side: 2, type: "wheat", ratio: 2 },
-  { q: -3, r: 2, side: 2, type: "ore", ratio: 2 },
-  { q: 0, r: 1, side: 5, type: "sheep", ratio: 2 },
+  // NO de 8 (costa oeste) -> puerto de piedra
+  { q: -3, r: 1, side: 3, type: "ore", ratio: 2 },
+  // SO de 8 (costa oeste) -> 3:1
+  { q: -3, r: 1, side: 1, type: "generic", ratio: 3 },
+  // O de 6 (trigo, isla SO) -> puerto de ladrillo
+  { q: -3, r: 3, side: 2, type: "brick", ratio: 2 },
+  // SO de 5 (madera) -> puerto de madera
   { q: -2, r: 3, side: 1, type: "wood", ratio: 2 },
-  { q: -2, r: 3, side: 0, type: "generic", ratio: 3 },
-  { q: 0, r: 3, side: 5, type: "generic", ratio: 3 },
+  // E de 5 (madera) -> 3:1
+  { q: -2, r: 3, side: 5, type: "generic", ratio: 3 },
+  // NE de 8 (madera) -> puerto de ovino
+  { q: 0, r: 1, side: 4, type: "sheep", ratio: 2 },
 ];
 
 const LAND_4P: LandHex[] = [
@@ -132,15 +140,24 @@ const LAND_4P: LandHex[] = [
 const SEA_4P: Array<[number, number]> = waterCells(LAND_4P, BOARD_ROWS_4P);
 
 const PORTS_4P: ScenarioPortSpec[] = [
+  // O de 5 (ovino) -> 3:1
   { q: -2, r: -1, side: 2, type: "generic", ratio: 3 },
-  { q: 1, r: -1, side: 4, type: "generic", ratio: 3 },
-  { q: -4, r: 3, side: 0, type: "generic", ratio: 3 },
-  { q: -1, r: 3, side: 3, type: "generic", ratio: 3 },
-  { q: -4, r: 0, side: 2, type: "sheep", ratio: 2 },
-  { q: -5, r: 1, side: 1, type: "brick", ratio: 2 },
-  { q: -1, r: -2, side: 3, type: "ore", ratio: 2 },
-  { q: 0, r: 2, side: 0, type: "wood", ratio: 2 },
-  { q: 3, r: 0, side: 5, type: "wheat", ratio: 2 },
+  // NO de 6 (ladrillo) -> puerto de ovino
+  { q: -4, r: 1, side: 3, type: "sheep", ratio: 2 },
+  // SO de 6 (ladrillo) -> puerto de ladrillo
+  { q: -4, r: 1, side: 1, type: "brick", ratio: 2 },
+  // O de 8 (costa oeste) -> 3:1
+  { q: -4, r: 3, side: 2, type: "generic", ratio: 3 },
+  // SO de 2 (madera) -> puerto de madera
+  { q: -3, r: 3, side: 1, type: "wood", ratio: 2 },
+  // E de 10 (piedra) -> 3:1
+  { q: -2, r: 3, side: 5, type: "generic", ratio: 3 },
+  // SE de 5 (madera) -> puerto de trigo
+  { q: 0, r: 1, side: 0, type: "wheat", ratio: 2 },
+  // NE de 9 (ovino) -> 3:1
+  { q: 0, r: 0, side: 4, type: "generic", ratio: 3 },
+  // NO de 4 (piedra) -> puerto de piedra
+  { q: 0, r: -1, side: 3, type: "ore", ratio: 2 },
 ];
 
 function nonDesertPool(

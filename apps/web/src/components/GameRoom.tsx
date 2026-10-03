@@ -128,9 +128,9 @@ export default function GameRoom({
   const handleEdgeClick = (edgeId: string) => {
     if (paused || !isMyTurn) return;
     if (game.phase === "setup-road") {
-      const kind = room.legal.shipIds.includes(edgeId) && !room.legal.roadIds.includes(edgeId)
-        ? "ship"
-        : "road";
+      const shipLegal = room.legal.shipIds.includes(edgeId);
+      const roadLegal = room.legal.roadIds.includes(edgeId);
+      const kind = shipLegal && (!roadLegal || mode === "ship") ? "ship" : "road";
       void onAction({ type: "place-setup-road", edgeId, kind }).then(resetSelection);
     } else if (mode === "road") {
       void onAction({ type: "build-road", edgeId }).then(resetSelection);
@@ -339,6 +339,23 @@ export default function GameRoom({
     0,
   );
 
+  useEffect(() => {
+    if (game.phase !== "setup-road" || !isMyTurn) return;
+    const canRoad = room.legal.roadIds.length > 0;
+    const canShip = room.legal.shipIds.length > 0;
+    if (mode === "ship" && !canShip) {
+      setMode(canRoad ? "road" : null);
+      return;
+    }
+    if (mode !== "ship" && !canRoad && canShip) {
+      setMode("ship");
+      return;
+    }
+    if (mode === null && (canRoad || canShip)) {
+      setMode(canRoad ? "road" : "ship");
+    }
+  }, [game.phase, isMyTurn, mode, room.legal.roadIds.length, room.legal.shipIds.length]);
+
   const hint = (() => {
     if (game.phase === "finished") return null;
     if (selectedCard?.type === "road-building") {
@@ -348,9 +365,10 @@ export default function GameRoom({
       return isMyTurn ? "Elegí un vértice vacío para tu poblado inicial." : `Colocando: ${currentPlayer?.name}`;
     }
     if (game.phase === "setup-road") {
-      return isMyTurn
-        ? "Elegí un camino o, si el poblado es costero, un barco."
-        : `Colocando: ${currentPlayer?.name}`;
+      if (!isMyTurn) return `Colocando: ${currentPlayer?.name}`;
+      return mode === "ship"
+        ? "Elegí una arista de mar para tu barco inicial."
+        : "Elegí una arista para tu camino inicial, o cambiá a Barco si el poblado es costero.";
     }
     if (game.phase === "activate") {
       return isMyTurn

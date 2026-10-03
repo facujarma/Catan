@@ -485,6 +485,35 @@ export default function GameActions({
             >
               Mover al marco
             </button>
+          ) : isMyTurn && game.phase === "setup-road" ? (
+            <span className="flex flex-wrap items-center justify-center gap-1.5">
+              <button
+                className={`inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 px-2 font-display text-[11px] font-extrabold shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50 ${
+                  mode === "ship"
+                    ? "border-[#8a5a1e] bg-[#fdf6e3] text-[#7a5320]"
+                    : "border-[#8a5a1e] bg-[#ffe9b8] text-[#4a2c12]"
+                }`}
+                type="button"
+                disabled={busy || room.legal.roadIds.length === 0}
+                onClick={() => onModeChange("road")}
+              >
+                <img className="h-5 w-auto" src={pieceFile("road", selfColor)} alt="" />
+                Camino
+              </button>
+              <button
+                className={`inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 px-2 font-display text-[11px] font-extrabold shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50 ${
+                  mode === "ship"
+                    ? "border-[#8a5a1e] bg-[#ffe9b8] text-[#4a2c12]"
+                    : "border-[#8a5a1e] bg-[#fdf6e3] text-[#7a5320]"
+                }`}
+                type="button"
+                disabled={busy || room.legal.shipIds.length === 0}
+                onClick={() => onModeChange("ship")}
+              >
+                <img className="h-5 w-auto" src={pieceFile("ship", selfColor)} alt="" />
+                Barco
+              </button>
+            </span>
           ) : (
             <p className="max-w-[200px] text-center text-[10px] font-semibold text-[#b08a4a]">
               {PHASE_LABEL[game.phase] ?? game.phase}
