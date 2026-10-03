@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
+import type { PlayerGameView, PlayerPrivateView } from "@catan/engine";
 import { api } from "./convexApi";
 import FeedPanel from "./components/FeedPanel";
 import GameRoom from "./components/GameRoom";
@@ -15,7 +16,67 @@ import {
   saveRoomCode,
 } from "./identity";
 import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD, TABLE_BACKGROUND } from "./ui";
-import type { ChatMessage, GameActionPayload, GameEvent, RoomSnapshot } from "./model";
+import type {
+  ChatMessage,
+  GameActionPayload,
+  GameEvent,
+  LegalPlacements,
+  PauseRequest,
+  RoomSnapshot,
+  TurnStat,
+} from "./model";
+
+const EMPTY_LEGAL: LegalPlacements = {
+  settlementVertexIds: [],
+  roadIds: [],
+  freeRoadIds: [],
+  shipIds: [],
+  freeShipIds: [],
+  movableShipIds: [],
+  shipMoveTargets: {},
+  pirateTargetHexIds: [],
+  cityVertexIds: [],
+  tradeRatios: { wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4 },
+  robberHexIds: [],
+};
+
+interface RoomInfo {
+  roomId: string;
+  boardId: string | null;
+  gameId: string | null;
+  code: string;
+  status: "lobby" | "playing" | "finished";
+  hostPlayerId: string;
+  selfPlayerId: string;
+  players: Array<{
+    id: string;
+    name: string;
+    ready: boolean;
+    isBot: boolean;
+    isHost: boolean;
+    isSelf: boolean;
+  }>;
+  turnTimeLimitSeconds: number;
+  expansion: "base" | "seafarers";
+  scenario: string | null;
+  setupMode: "fixed" | "variable";
+}
+
+interface PublicGameInfo {
+  view: Omit<PlayerGameView, "board" | "self">;
+  turnDeadlineAt: number | null;
+  tradeRespondDeadlineAt: number | null;
+  pausedAt: number | null;
+  pauseRemainingMs: number | null;
+  pauseRequest: PauseRequest | null;
+  turnStats: Record<string, TurnStat>;
+}
+
+interface SelfInfo {
+  view: PlayerPrivateView;
+  legal: LegalPlacements;
+}
+
 
 export default function App() {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim();
@@ -41,18 +102,70 @@ function CatanApp() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const room = useQuery(
+  const roomInfo = useQuery(
     api.rooms.getRoom,
     roomCode ? { code: roomCode, playerToken: identity.playerToken } : "skip",
-  ) as RoomSnapshot | null | undefined;
+  ) as RoomInfo | null | undefined;
+  const roomId: string | null = roomInfo?.roomId ?? null;
+  const gameId: string | null = roomInfo?.gameId ?? null;
+  const boardId: string | null = roomInfo?.boardId ?? null;
+
+  const board = useQuery(
+    api.rooms.getBoard,
+    boardId ? { boardId } : "skip",
+  ) as PlayerGameView["board"] | undefined;
+  const publicGame = useQuery(
+    api.rooms.getGame,
+    gameId ? { gameId } : "skip",
+  ) as PublicGameInfo | undefined;
+  const selfInfo = useQuery(
+    api.rooms.getSelf,
+    roomId ? { roomId, playerToken: identity.playerToken } : "skip",
+  ) as SelfInfo | undefined;
+  const presence = useQuery(
+    api.rooms.getPresence,
+    roomId ? { roomId } : "skip",
+  ) as string[] | undefined;
   const messages = useQuery(
     api.rooms.listMessages,
-    roomCode && room ? { code: roomCode, playerToken: identity.playerToken } : "skip",
+    roomId ? { roomId } : "skip",
   ) as ChatMessage[] | undefined;
   const events = useQuery(
     api.rooms.listEvents,
-    roomCode && room ? { code: roomCode, playerToken: identity.playerToken } : "skip",
+    roomId ? { roomId } : "skip",
   ) as GameEvent[] | undefined;
+
+  const room = useMemo<RoomSnapshot | null | undefined>(() => {
+    if (roomInfo === undefined) return undefined;
+    if (roomInfo === null) return null;
+    const onlineIds = new Set(presence ?? []);
+    const game: PlayerGameView | null =
+      publicGame && board && selfInfo
+        ? { ...publicGame.view, board, self: selfInfo.view }
+        : null;
+    return {
+      code: roomInfo.code,
+      status: roomInfo.status,
+      hostPlayerId: roomInfo.hostPlayerId,
+      selfPlayerId: roomInfo.selfPlayerId,
+      players: roomInfo.players.map((player) => ({
+        ...player,
+        online: player.isBot || onlineIds.has(player.id),
+      })),
+      turnTimeLimitSeconds: roomInfo.turnTimeLimitSeconds,
+      turnDeadlineAt: publicGame?.turnDeadlineAt ?? null,
+      tradeRespondDeadlineAt: publicGame?.tradeRespondDeadlineAt ?? null,
+      pausedAt: publicGame?.pausedAt ?? null,
+      pauseRemainingMs: publicGame?.pauseRemainingMs ?? null,
+      pauseRequest: publicGame?.pauseRequest ?? null,
+      turnStats: publicGame?.turnStats ?? {},
+      expansion: roomInfo.expansion,
+      scenario: roomInfo.scenario,
+      setupMode: roomInfo.setupMode,
+      game,
+      legal: selfInfo?.legal ?? EMPTY_LEGAL,
+    };
+  }, [roomInfo, publicGame, board, selfInfo, presence]);
 
   const createRoomMutation = useMutation(api.rooms.createRoom);
   const joinRoomMutation = useMutation(api.rooms.joinRoom);

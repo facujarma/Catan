@@ -60,10 +60,54 @@ async function startGameWithoutShuffle(t: TestClient): Promise<void> {
   }
 }
 
+const EMPTY_LEGAL = {
+  settlementVertexIds: [],
+  roadIds: [],
+  freeRoadIds: [],
+  shipIds: [],
+  freeShipIds: [],
+  movableShipIds: [],
+  shipMoveTargets: {},
+  pirateTargetHexIds: [],
+  cityVertexIds: [],
+  tradeRatios: { wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4 },
+  robberHexIds: [],
+};
+
+async function rawRoom(t: TestClient) {
+  return await t.query(api.rooms.getRoom, { code: CODE, playerToken: HOST.playerToken });
+}
+
 async function snapshot(t: TestClient) {
-  const room = await t.query(api.rooms.getRoom, { code: CODE, playerToken: HOST.playerToken });
+  const room = await rawRoom(t);
   if (!room) throw new Error("La sala de prueba no existe.");
-  return room;
+  const presence = await t.query(api.rooms.getPresence, { roomId: room.roomId });
+  const game = room.gameId
+    ? await t.query(api.rooms.getGame, { gameId: room.gameId })
+    : null;
+  const board = room.boardId
+    ? await t.query(api.rooms.getBoard, { boardId: room.boardId })
+    : null;
+  const self = await t.query(api.rooms.getSelf, {
+    roomId: room.roomId,
+    playerToken: HOST.playerToken,
+  });
+  const onlineIds = new Set(presence);
+  return {
+    ...room,
+    players: room.players.map((player) => ({
+      ...player,
+      online: player.isBot || onlineIds.has(player.id),
+    })),
+    turnDeadlineAt: game?.turnDeadlineAt ?? null,
+    tradeRespondDeadlineAt: game?.tradeRespondDeadlineAt ?? null,
+    pausedAt: game?.pausedAt ?? null,
+    pauseRemainingMs: game?.pauseRemainingMs ?? null,
+    pauseRequest: game?.pauseRequest ?? null,
+    turnStats: game?.turnStats ?? {},
+    game: game && board && self ? { ...game.view, board, self: self.view } : null,
+    legal: self?.legal ?? EMPTY_LEGAL,
+  };
 }
 
 async function act(t: TestClient, action: ActionPayload): Promise<void> {
@@ -140,18 +184,16 @@ describe("bots", () => {
       random.mockRestore();
     }
 
-    const raw = await t.run(async (ctx) => ctx.db.query("rooms").first());
-    const state = raw!.gameState as GameState;
+    const raw = await t.run(async (ctx) => ctx.db.query("gameStates").first());
+    const state = raw!.public as GameState;
     expect(state.players.map((player) => player.id)).toEqual([
       firstBot.botId,
       secondBot.botId,
       HOST.playerId,
     ]);
 
-    const events = await t.query(api.rooms.listEvents, {
-      code: CODE,
-      playerToken: HOST.playerToken,
-    });
+    const info = await rawRoom(t);
+    const events = await t.query(api.rooms.listEvents, { roomId: info!.roomId });
     expect(events.some((event) => event.message.includes("Orden de turnos"))).toBe(true);
   });
 
@@ -261,13 +303,22 @@ describe("bots", () => {
     await placeHostSetup(t);
 
     await t.run(async (ctx) => {
-      const room = await ctx.db.query("rooms").first();
-      const state = room!.gameState;
-      state.phase = "main";
-      state.players[0].resources = { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 };
-      state.players[1].resources = { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 };
-      state.players[2].resources = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
-      await ctx.db.patch(room!._id, { gameState: state });
+      const game = await ctx.db.query("gameStates").first();
+      const publicState = game!.public as GameState;
+      publicState.phase = "main";
+      await ctx.db.patch(game!._id, { public: publicState });
+      const playerStates = await ctx.db.query("playerStates").collect();
+      const bundles = [
+        { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+        { wood: 0, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+        { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 },
+      ];
+      for (const playerState of playerStates) {
+        const index = publicState.players.findIndex(( player) => player.id === playerState.playerId);
+        if (index >= 0) {
+          await ctx.db.patch(playerState._id, { resources: bundles[index] });
+        }
+      }
     });
 
     await act(t, {

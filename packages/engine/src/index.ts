@@ -27,7 +27,19 @@ export {
 } from "./scoring";
 export { SeededRandom, hashSeed } from "./random";
 export { emptyResources, totalResources } from "./resources";
-export { getPlayerView } from "./view";
+export {
+  buildPrivatePlayerView,
+  buildPublicGameView,
+  getPlayerView,
+  joinGameState,
+  splitGameState,
+} from "./view";
+export type {
+  SplitGameState,
+  StoredPrivatePlayerState,
+  StoredPublicPlayer,
+  StoredPublicState,
+} from "./view";
 export {
   buildScenarioBoard,
   createSeededScenarioRandom,
@@ -65,6 +77,7 @@ export type {
   PiratePosition,
   PlayerConfig,
   PlayerGameView,
+  PlayerPrivateView,
   PlayerPublicView,
   PlayerState,
   Port,

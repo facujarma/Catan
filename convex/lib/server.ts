@@ -14,6 +14,9 @@ export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 export type QueryCtx = GenericQueryCtx<DataModel>;
 export type MutationCtx = GenericMutationCtx<DataModel>;
 export type RoomDocument = DocumentByName<DataModel, "rooms">;
+export type GameBoardDocument = DocumentByName<DataModel, "gameBoards">;
+export type GameStateDocument = DocumentByName<DataModel, "gameStates">;
+export type PlayerStateDocument = DocumentByName<DataModel, "playerStates">;
 
 export const query = queryGeneric as QueryBuilder<DataModel, "public">;
 export const mutation = mutationGeneric as MutationBuilder<DataModel, "public">;

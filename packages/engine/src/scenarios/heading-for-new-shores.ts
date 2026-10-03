@@ -48,33 +48,44 @@ const LAND_3P: LandHex[] = [
   { q: 0, r: 3, terrain: "brick", number: 10, region: "island-c" },
 ];
 
-const WATER_DISTANCE = 1;
+// La region del tablero se define por filas (r) con su rango de q.
+// Las longitudes copian el mapa oficial: 4,5,6,7,6,5,4 (3p) y 5,6,7,8,7,6,5 (4p).
+const BOARD_ROWS_3P: Array<[number, number, number]> = [
+  [-3, 0, 3],
+  [-2, -1, 3],
+  [-1, -2, 3],
+  [0, -3, 3],
+  [1, -3, 2],
+  [2, -3, 1],
+  [3, -3, 0],
+];
 
-function hexDistance(aq: number, ar: number, bq: number, br: number): number {
-  const dq = aq - bq;
-  const dr = ar - br;
-  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
-}
+const BOARD_ROWS_4P: Array<[number, number, number]> = [
+  [-3, -1, 3],
+  [-2, -2, 3],
+  [-1, -3, 3],
+  [0, -4, 3],
+  [1, -4, 2],
+  [2, -4, 1],
+  [3, -4, 0],
+];
 
-function waterCells(land: LandHex[]): Array<[number, number]> {
+function waterCells(
+  land: LandHex[],
+  rows: ReadonlyArray<[number, number, number]>,
+): Array<[number, number]> {
   const landKeys = new Set(land.map((hex) => `${hex.q},${hex.r}`));
-  const water = new Map<string, [number, number]>();
-  for (const hex of land) {
-    for (let dq = -WATER_DISTANCE; dq <= WATER_DISTANCE; dq += 1) {
-      for (let dr = -WATER_DISTANCE; dr <= WATER_DISTANCE; dr += 1) {
-        if (hexDistance(hex.q, hex.r, hex.q + dq, hex.r + dr) > WATER_DISTANCE) continue;
-        const q = hex.q + dq;
-        const r = hex.r + dr;
-        const key = `${q},${r}`;
-        if (landKeys.has(key)) continue;
-        water.set(key, [q, r]);
-      }
+  const water: Array<[number, number]> = [];
+  for (const [r, qStart, qEnd] of rows) {
+    for (let q = qStart; q <= qEnd; q += 1) {
+      if (landKeys.has(`${q},${r}`)) continue;
+      water.push([q, r]);
     }
   }
-  return [...water.values()];
+  return water;
 }
 
-const SEA_3P: Array<[number, number]> = waterCells(LAND_3P);
+const SEA_3P: Array<[number, number]> = waterCells(LAND_3P, BOARD_ROWS_3P);
 
 const PORTS_3P: ScenarioPortSpec[] = [
   { q: -1, r: -1, side: 2, type: "brick", ratio: 2 },
@@ -118,7 +129,7 @@ const LAND_4P: LandHex[] = [
   { q: 0, r: 3, terrain: "wheat", number: 6, region: "island-c" },
 ];
 
-const SEA_4P: Array<[number, number]> = waterCells(LAND_4P);
+const SEA_4P: Array<[number, number]> = waterCells(LAND_4P, BOARD_ROWS_4P);
 
 const PORTS_4P: ScenarioPortSpec[] = [
   { q: -2, r: -1, side: 2, type: "generic", ratio: 3 },
