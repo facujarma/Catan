@@ -342,7 +342,7 @@ export default function GameRoom({
   useEffect(() => {
     if (game.phase !== "setup-road" || !isMyTurn) return;
     const canRoad = room.legal.roadIds.length > 0;
-    const canShip = room.legal.shipIds.length > 0;
+    const canShip = room.expansion === "seafarers" && room.legal.shipIds.length > 0;
     if (mode === "ship" && !canShip) {
       setMode(canRoad ? "road" : null);
       return;
@@ -354,7 +354,7 @@ export default function GameRoom({
     if (mode === null && (canRoad || canShip)) {
       setMode(canRoad ? "road" : "ship");
     }
-  }, [game.phase, isMyTurn, mode, room.legal.roadIds.length, room.legal.shipIds.length]);
+  }, [game.phase, isMyTurn, mode, room.legal.roadIds.length, room.legal.shipIds.length, room.expansion]);
 
   const hint = (() => {
     if (game.phase === "finished") return null;
@@ -366,9 +366,10 @@ export default function GameRoom({
     }
     if (game.phase === "setup-road") {
       if (!isMyTurn) return `Colocando: ${currentPlayer?.name}`;
-      return mode === "ship"
-        ? "Elegí una arista de mar para tu barco inicial."
-        : "Elegí una arista para tu camino inicial, o cambiá a Barco si el poblado es costero.";
+      if (mode === "ship") return "Elegí una arista de mar para tu barco inicial.";
+      return room.expansion === "seafarers"
+        ? "Elegí una arista para tu camino inicial, o cambiá a Barco si el poblado es costero."
+        : "Elegí una arista para tu camino inicial.";
     }
     if (game.phase === "activate") {
       return isMyTurn
@@ -502,7 +503,7 @@ export default function GameRoom({
 
         <section
           className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[0_4px_0_rgba(30,16,6,0.35),inset_0_0_0_1px_rgba(255,255,255,0.12)] ${
-            alarmActive ? "alarm-active" : ""
+            alarmActive ? "alarm-active" : isMyTurn && game.phase !== "finished" ? "turn-board-glow" : ""
           }`}
         >
           <BoardSvg
@@ -1033,15 +1034,15 @@ function PlayerPanel({
       ? `${stat.turns} ${stat.turns === 1 ? "turno" : "turnos"} · último ${formatDuration(stat.lastTurnMs)}`
       : "Todavía no jugó turnos";
   const tone = player.isCurrentPlayer
-    ? "border-[#d9a44a] bg-[#fff3d6] ring-2 ring-[#d9a44a]/40"
+    ? "border-4 border-[#ffd76a] bg-[#fff3d6]"
     : self
-      ? "border-[#c9a86a] bg-[#fdf6e3]"
-      : "border-[#c9a86a] bg-[#f7ecd4]";
+      ? "border-2 border-[#c9a86a] bg-[#fdf6e3]"
+      : "border-2 border-[#c9a86a] bg-[#f7ecd4]";
 
   return (
     <article
       id={`player-card-${player.id}`}
-      className={`group relative rounded-2xl border-2 px-2.5 py-2 shadow-[0_3px_0_rgba(74,44,18,0.25)] max-[940px]:min-w-[190px] ${tone} ${
+      className={`group relative rounded-2xl px-2.5 py-2 shadow-[0_3px_0_rgba(74,44,18,0.25)] max-[940px]:min-w-[190px] ${tone} ${
         offline ? "opacity-70" : ""
       } ${player.isCurrentPlayer ? "turn-glow" : ""}`}
       title={`Ritmo de juego de ${player.name}: ${averageLabel} (${statsDetail}) · Camino más largo: ${player.longestRoadLength}`}

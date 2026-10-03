@@ -8,10 +8,11 @@ import {
   getLegalShipMoveTargets,
   getLegalShipPlacements,
   getLegalSettlementPlacements,
+  getMovableShipIds,
   getPirateVictims,
   SeededRandom,
 } from "../src";
-import type { GameState } from "../src/types";
+import type { Edge, GameState, Vertex } from "../src/types";
 import { playerConfigs } from "./helpers";
 
 const SCENARIO = "heading-for-new-shores";
@@ -536,5 +537,100 @@ describe("opcion sin oro en la isla principal", () => {
         built.board.hexes.map((hex) => `${hex.id}:${hex.terrain}`),
       );
     }
+  });
+});
+
+describe("poblados en agua", () => {
+  test("no se puede construir un poblado en un vertice rodeado solo de agua", () => {
+    const state = toMain(setupScenarioGame(3));
+    const waterVertex = state.board.vertices.find((vertex) =>
+      vertex.hexIds.every(
+        (hexId) => state.board.hexes.find((hex) => hex.id === hexId)?.terrain === "sea",
+      ),
+    );
+    expect(waterVertex).toBeDefined();
+    const edge = state.board.edges.find((candidate) =>
+      candidate.vertexIds.includes(waterVertex!.id),
+    )!;
+    const withShip: GameState = {
+      ...state,
+      players: state.players.map((player, index) =>
+        index === 0
+          ? {
+              ...player,
+              ships: [edge.id],
+              resources: { wood: 1, brick: 1, sheep: 1, wheat: 1, ore: 0 },
+            }
+          : player,
+      ),
+    };
+
+    expect(getLegalSettlementPlacements(withShip, "p1")).not.toContain(waterVertex!.id);
+    expect(() =>
+      applyAction(withShip, {
+        type: "build-settlement",
+        playerId: "p1",
+        vertexId: waterVertex!.id,
+      }),
+    ).toThrow();
+  });
+});
+
+describe("ramas de barcos", () => {
+  test("la punta de una rama de una ruta cerrada se puede mover; el tramo interior no", () => {
+    const state = toMain(setupScenarioGame(3));
+    const vertexById = new Map<string, Vertex>(
+      state.board.vertices.map((vertex) => [vertex.id, vertex]),
+    );
+    const edgeById = new Map<string, Edge>(
+      state.board.edges.map((edge) => [edge.id, edge]),
+    );
+    const isWater = (edgeId: string) => {
+      const edge = edgeById.get(edgeId)!;
+      return (
+        edge.hexIds.some(
+          (hexId) => state.board.hexes.find((hex) => hex.id === hexId)?.terrain === "sea",
+        ) || edge.hexIds.length < 2
+      );
+    };
+    const neighbors = (vertexId: string, exclude: string[] = []): Edge[] =>
+      vertexById
+        .get(vertexId)!
+        .edgeIds.map((id) => edgeById.get(id)!)
+        .filter((edge) => !exclude.includes(edge.id) && isWater(edge.id));
+
+    const v0 = state.board.vertices.find((vertex) =>
+      vertex.edgeIds.some((id) => isWater(id)),
+    )!;
+    const e1 = neighbors(v0.id)[0]!;
+    const v1 = e1.vertexIds.find((id) => id !== v0.id)!;
+    const e2 = neighbors(v1, [e1.id])[0]!;
+    const v2 = e2.vertexIds.find((id) => id !== v1)!;
+    const e3 = neighbors(v2, [e2.id])[0]!;
+    const v3 = e3.vertexIds.find((id) => id !== v2)!;
+    const e4 = neighbors(v3, [e3.id])[0]!;
+    const v4 = e4.vertexIds.find((id) => id !== v3)!;
+    const b1 = neighbors(v2, [e2.id, e3.id])[0]!;
+    const vb1 = b1.vertexIds.find((id) => id !== v2)!;
+    const b2 = neighbors(vb1, [b1.id])[0]!;
+
+    const withNetwork: GameState = {
+      ...toMain(state),
+      players: state.players.map((player, index) =>
+        index === 0
+          ? {
+              ...player,
+              settlements: [v0.id, v4],
+              ships: [e1.id, e2.id, e3.id, e4.id, b1.id, b2.id],
+            }
+          : player,
+      ),
+    };
+
+    const movable = new Set(getMovableShipIds(withNetwork, "p1"));
+    expect(movable.has(b2.id)).toBe(true);
+    expect(movable.has(b1.id)).toBe(false);
+    expect(movable.has(e1.id)).toBe(false);
+    expect(movable.has(e2.id)).toBe(false);
   });
 });

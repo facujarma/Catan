@@ -393,6 +393,12 @@ function canPlaceSettlementOnBoard(
   if (vertex.adjacentVertexIds.some((neighborId) => getBuildingOwner(state, neighborId) !== null)) {
     return false;
   }
+  // Un poblado siempre necesita al menos un hexagono de tierra.
+  const touchesLand = vertex.hexIds.some((hexId) => {
+    const terrain = getHex(state, hexId)?.terrain;
+    return terrain !== undefined && terrain !== "sea";
+  });
+  if (!touchesLand) return false;
   if (!requireRoute) return true;
   return vertex.edgeIds.some(
     (edgeId) =>
