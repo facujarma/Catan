@@ -39,6 +39,7 @@ export default defineSchema({
     expansion: v.optional(v.union(v.literal("base"), v.literal("seafarers"))),
     scenario: v.optional(v.string()),
     setupMode: v.optional(v.union(v.literal("fixed"), v.literal("variable"))),
+    mainIslandNoGold: v.optional(v.boolean()),
     turnTimeLimitSeconds: v.optional(v.number()),
     boardId: v.optional(v.id("gameBoards")),
     gameId: v.optional(v.id("gameStates")),

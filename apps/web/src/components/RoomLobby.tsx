@@ -15,6 +15,7 @@ interface RoomLobbyProps {
   onExpansionChange: (expansion: "base" | "seafarers") => void;
   onScenarioChange: (scenario: string) => void;
   onSetupModeChange: (setupMode: "fixed" | "variable") => void;
+  onMainIslandNoGoldChange: (value: boolean) => void;
   onStart: () => void;
   onLeave: () => void;
   onCopyInvite: () => void;
@@ -44,6 +45,7 @@ export default function RoomLobby({
   onExpansionChange,
   onScenarioChange,
   onSetupModeChange,
+  onMainIslandNoGoldChange,
   onStart,
   onLeave,
   onCopyInvite,
@@ -101,10 +103,6 @@ export default function RoomLobby({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className={EYEBROW}>Expansión y mapa</p>
-            <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-[#a08a5e]">
-              Se elige antes de empezar. El mapa se arma automáticamente con el tablero de
-              {" "}{mapVariantLabel} que corresponda.
-            </p>
           </div>
           {me?.isHost ? (
             <div className="flex flex-wrap items-end gap-2">
@@ -162,6 +160,23 @@ export default function RoomLobby({
             {scenario.description}
             {!me?.isHost && ` · ${room.setupMode === "variable" ? "Setup variable" : "Setup fijo"}`}
           </p>
+        )}
+        {room.expansion === "seafarers" && (
+          <label className="mt-3 flex items-start gap-2 border-t-2 border-dashed border-[#e3cfa5] pt-3 text-xs font-semibold text-[#8a6a3a]">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[#a9793a]"
+              checked={room.mainIslandNoGold}
+              disabled={busy || !me?.isHost || room.setupMode !== "variable"}
+              onChange={(event) => onMainIslandNoGoldChange(event.target.checked)}
+            />
+            <span>
+              <strong className="text-[#4a2c12]">Sin campos de oro en la isla principal</strong>
+              <span className="block text-[11px] font-semibold text-[#a08a5e]">
+                {room.setupMode !== "variable" ? " (Disponible en setup variable)" : ""}
+              </span>
+            </span>
+          </label>
         )}
       </div>
 

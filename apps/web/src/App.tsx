@@ -60,6 +60,7 @@ interface RoomInfo {
   expansion: "base" | "seafarers";
   scenario: string | null;
   setupMode: "fixed" | "variable";
+  mainIslandNoGold: boolean;
 }
 
 interface PublicGameInfo {
@@ -162,6 +163,7 @@ function CatanApp() {
       expansion: roomInfo.expansion,
       scenario: roomInfo.scenario,
       setupMode: roomInfo.setupMode,
+      mainIslandNoGold: roomInfo.mainIslandNoGold,
       game,
       legal: selfInfo?.legal ?? EMPTY_LEGAL,
     };
@@ -176,6 +178,7 @@ function CatanApp() {
   const setExpansionMutation = useMutation(api.rooms.setExpansion);
   const setScenarioMutation = useMutation(api.rooms.setScenario);
   const setSetupModeMutation = useMutation(api.rooms.setSetupMode);
+  const setMainIslandNoGoldMutation = useMutation(api.rooms.setMainIslandNoGold);
   const startGameMutation = useMutation(api.rooms.startGame);
   const applyActionMutation = useMutation(api.rooms.applyGameAction);
   const requestPauseMutation = useMutation(api.rooms.requestPause);
@@ -332,6 +335,13 @@ function CatanApp() {
     if (!roomCode) return;
     await run(() =>
       setSetupModeMutation({ code: roomCode, playerToken: identity.playerToken, setupMode }),
+    );
+  };
+
+  const setMainIslandNoGold = async (value: boolean) => {
+    if (!roomCode) return;
+    await run(() =>
+      setMainIslandNoGoldMutation({ code: roomCode, playerToken: identity.playerToken, value }),
     );
   };
 
@@ -495,6 +505,7 @@ function CatanApp() {
             onExpansionChange={setExpansion}
             onScenarioChange={setScenario}
             onSetupModeChange={setSetupMode}
+            onMainIslandNoGoldChange={setMainIslandNoGold}
             onStart={startGame}
             onLeave={leaveRoom}
             onCopyInvite={copyInvite}

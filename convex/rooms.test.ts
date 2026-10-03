@@ -584,3 +584,44 @@ describe("expansión Navegantes", () => {
     expect(routeTotal).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("opción sin oro en la isla principal", () => {
+  test("con la opción activada el oro no cae en la isla principal", async () => {
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.setScenario, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      scenario: "heading-for-new-shores",
+    });
+    await t.mutation(api.rooms.setSetupMode, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      setupMode: "variable",
+    });
+    await t.mutation(api.rooms.setMainIslandNoGold, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      value: true,
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    const room = await snapshot(t);
+    expect(room.mainIslandNoGold).toBe(true);
+    const board = room.game!.board;
+    const mainRegion = board.regions!.find((region) => region.kind === "main")!;
+    const mainHexIds = new Set(mainRegion.hexIds);
+    const golds = board.hexes.filter((hex) => hex.terrain === "gold");
+    expect(golds).toHaveLength(2);
+    for (const gold of golds) {
+      expect(mainHexIds.has(gold.id)).toBe(false);
+    }
+  });
+});

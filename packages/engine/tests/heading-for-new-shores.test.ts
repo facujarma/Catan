@@ -513,3 +513,28 @@ describe("movimiento de barcos", () => {
     expect(moved.players[0]!.ships).not.toContain(b);
   });
 });
+
+describe("opcion sin oro en la isla principal", () => {
+  test("en setup variable el oro solo cae en islas no principales", () => {
+    for (const playerCount of [3, 4] as const) {
+      const built = buildScenarioBoard(SCENARIO, playerCount, "variable", new SeededRandom(123), {
+        mainIslandNoGold: true,
+      });
+      const mainRegion = built.board.regions!.find((region) => region.kind === "main")!;
+      const mainHexIds = new Set(mainRegion.hexIds);
+      const golds = built.board.hexes.filter((hex) => hex.terrain === "gold");
+      expect(golds).toHaveLength(2);
+      for (const gold of golds) {
+        expect(mainHexIds.has(gold.id)).toBe(false);
+      }
+      expect(countByTerrain(built.board)).toEqual(countByTerrain(buildFixed(playerCount).board));
+
+      const again = buildScenarioBoard(SCENARIO, playerCount, "variable", new SeededRandom(123), {
+        mainIslandNoGold: true,
+      });
+      expect(again.board.hexes.map((hex) => `${hex.id}:${hex.terrain}`)).toEqual(
+        built.board.hexes.map((hex) => `${hex.id}:${hex.terrain}`),
+      );
+    }
+  });
+});

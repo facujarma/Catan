@@ -57,6 +57,7 @@ export interface RoomSnapshot {
   expansion: "base" | "seafarers";
   scenario: string | null;
   setupMode: "fixed" | "variable";
+  mainIslandNoGold: boolean;
   game: PlayerGameView | null;
   legal: LegalPlacements;
 }

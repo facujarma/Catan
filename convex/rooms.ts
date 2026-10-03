@@ -1210,6 +1210,19 @@ export const setSetupMode = mutation({
   },
 });
 
+export const setMainIslandNoGold = mutation({
+  args: { code: v.string(), playerToken: v.string(), value: v.boolean() },
+  handler: async (ctx, args) => {
+    const { room, member } = await requireRoomMember(ctx, args.code, args.playerToken);
+    if (room.status !== "lobby") fail("ROOM_ALREADY_STARTED", "La sala ya no está en el lobby.");
+    if (member.id !== room.hostPlayerId) {
+      fail("HOST_ONLY", "Solo quien creó la sala puede cambiar esta opción.");
+    }
+    await ctx.db.patch(room._id, { mainIslandNoGold: args.value, updatedAt: Date.now() });
+    return { mainIslandNoGold: args.value };
+  },
+});
+
 export const startGame = mutation({
   args: { code: v.string(), playerToken: v.string() },
   handler: async (ctx, args) => {
@@ -1231,6 +1244,7 @@ export const startGame = mutation({
       seed: String(room._id),
       ...(scenarioId ? { scenarioId } : {}),
       setupMode: room.setupMode ?? "fixed",
+      mainIslandNoGold: room.mainIslandNoGold ?? false,
     });
     const now = Date.now();
     const limitSeconds = room.turnTimeLimitSeconds ?? DEFAULT_TURN_TIME_LIMIT_SECONDS;
@@ -1310,6 +1324,7 @@ export const getRoom = query({
       expansion: room.expansion ?? "base",
       scenario: room.scenario ?? null,
       setupMode: room.setupMode ?? "fixed",
+      mainIslandNoGold: room.mainIslandNoGold ?? false,
     };
   },
 });

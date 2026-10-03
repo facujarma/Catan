@@ -1102,24 +1102,6 @@ function PlayerPanel({
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2.5 text-[11px] font-semibold text-[#a08a5e]">
-            <span className="inline-flex items-center gap-1" title="Caminos construidos">
-              <img className="h-4 w-auto" src={pieceFile("road", player.color)} alt="" />
-              {player.roadsBuilt}
-            </span>
-            <span className="inline-flex items-center gap-1" title="Poblados construidos">
-              <img className="h-4 w-auto" src={pieceFile("settlement", player.color)} alt="" />
-              {player.settlementsBuilt}
-            </span>
-            <span className="inline-flex items-center gap-1" title="Ciudades construidas">
-              <img className="h-4 w-auto" src={pieceFile("city", player.color)} alt="" />
-              {player.citiesBuilt}
-            </span>
-            {player.shipsBuilt > 0 && (
-              <span className="inline-flex items-center gap-1" title="Barcos construidos">
-                <img className="h-4 w-auto" src={pieceFile("ship", player.color)} alt="" />
-                {player.shipsBuilt}
-              </span>
-            )}
             {player.bonusVictoryPoints > 0 && (
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-[#e4f0cf] px-1.5 py-0.5 text-[9px] font-extrabold text-[#4a6b28]"

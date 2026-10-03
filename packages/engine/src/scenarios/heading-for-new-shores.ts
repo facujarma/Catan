@@ -190,7 +190,7 @@ export const HEADING_FOR_NEW_SHORES: ScenarioDefinition = {
   id: "heading-for-new-shores",
   name: "Rumbo a nuevas costas",
   description:
-    "La primera travesía: isla principal, islas pequeñas que otorgan 2 PV extra y pirata en aguas abiertas. Gana quien llegue a 14 PV.",
+    "",
   resourcePorts: ["wood", "brick", "sheep", "wheat", "ore"],
   variants: {
     "3": {

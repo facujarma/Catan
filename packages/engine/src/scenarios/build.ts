@@ -59,12 +59,13 @@ export function buildScenarioBoard(
   playerCount: 3 | 4,
   setupMode: SetupMode,
   random: RandomSource,
-  options: { forbidRedOnGold?: boolean } = {},
+  options: { forbidRedOnGold?: boolean; mainIslandNoGold?: boolean } = {},
 ): BuiltScenario {
   const definition = getScenarioDefinition(scenarioId);
   if (!definition) throw new Error(`No existe el escenario ${scenarioId}.`);
   const variant: ScenarioVariantSpec = definition.variants[String(playerCount) as "3" | "4"];
   const forbidRedOnGold = options.forbidRedOnGold ?? false;
+  const mainIslandNoGold = options.mainIslandNoGold ?? false;
 
   const landSlots = variant.hexes.filter((hex) => !hex.sea);
   const seaSlots = variant.hexes.filter((hex) => hex.sea);
@@ -72,10 +73,29 @@ export function buildScenarioBoard(
   const terrainBySlot = new Map<string, Resource | "gold">();
   if (setupMode === "variable") {
     const pool = random.shuffle(variant.terrainPool);
-    let index = 0;
-    for (const slot of landSlots) {
-      if (slot.desert) continue;
-      terrainBySlot.set(hexId(slot.q, slot.r), pool[index++] ?? "wood");
+    if (mainIslandNoGold) {
+      // Los campos de oro solo pueden caer en islas no principales.
+      const islandSlots = random.shuffle(
+        landSlots.filter((slot) => !slot.desert && slot.region !== "main"),
+      );
+      const mainSlots = landSlots.filter((slot) => !slot.desert && slot.region === "main");
+      const golds = pool.filter((terrain) => terrain === "gold");
+      const others = pool.filter((terrain) => terrain !== "gold");
+      golds.forEach((terrain, index) => {
+        const slot = islandSlots[index];
+        if (slot) terrainBySlot.set(hexId(slot.q, slot.r), terrain);
+      });
+      const restSlots = [...islandSlots.slice(golds.length), ...mainSlots];
+      others.forEach((terrain, index) => {
+        const slot = restSlots[index];
+        if (slot) terrainBySlot.set(hexId(slot.q, slot.r), terrain);
+      });
+    } else {
+      let index = 0;
+      for (const slot of landSlots) {
+        if (slot.desert) continue;
+        terrainBySlot.set(hexId(slot.q, slot.r), pool[index++] ?? "wood");
+      }
     }
   }
 

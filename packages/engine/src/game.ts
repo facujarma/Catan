@@ -141,7 +141,10 @@ function createScenarioSetup(
     options.players.length as 3 | 4,
     options.setupMode ?? "fixed",
     random,
-    { forbidRedOnGold: options.forbidRedOnGold ?? false },
+    {
+      forbidRedOnGold: options.forbidRedOnGold ?? false,
+      mainIslandNoGold: options.mainIslandNoGold ?? false,
+    },
   );
   return {
     board: built.board,

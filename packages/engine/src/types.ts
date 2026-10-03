@@ -190,6 +190,7 @@ export interface CreateGameOptions {
   scenarioId?: string;
   setupMode?: "fixed" | "variable";
   forbidRedOnGold?: boolean;
+  mainIslandNoGold?: boolean;
 }
 
 export type RouteKind = "road" | "ship";
