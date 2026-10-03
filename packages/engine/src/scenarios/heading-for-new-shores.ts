@@ -48,21 +48,33 @@ const LAND_3P: LandHex[] = [
   { q: 0, r: 3, terrain: "brick", number: 10, region: "island-c" },
 ];
 
-const SEA_3P: Array<[number, number]> = [
-  [2, -3],
-  [-2, -2],
-  [-1, -2],
-  [0, -2],
-  [1, -2],
-  [1, -1],
-  [1, 0],
-  [1, 1],
-  [2, 1],
-  [2, 2],
-  [1, 3],
-  [0, 2],
-  [3, 0],
-];
+const WATER_DISTANCE = 1;
+
+function hexDistance(aq: number, ar: number, bq: number, br: number): number {
+  const dq = aq - bq;
+  const dr = ar - br;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
+function waterCells(land: LandHex[]): Array<[number, number]> {
+  const landKeys = new Set(land.map((hex) => `${hex.q},${hex.r}`));
+  const water = new Map<string, [number, number]>();
+  for (const hex of land) {
+    for (let dq = -WATER_DISTANCE; dq <= WATER_DISTANCE; dq += 1) {
+      for (let dr = -WATER_DISTANCE; dr <= WATER_DISTANCE; dr += 1) {
+        if (hexDistance(hex.q, hex.r, hex.q + dq, hex.r + dr) > WATER_DISTANCE) continue;
+        const q = hex.q + dq;
+        const r = hex.r + dr;
+        const key = `${q},${r}`;
+        if (landKeys.has(key)) continue;
+        water.set(key, [q, r]);
+      }
+    }
+  }
+  return [...water.values()];
+}
+
+const SEA_3P: Array<[number, number]> = waterCells(LAND_3P);
 
 const PORTS_3P: ScenarioPortSpec[] = [
   { q: -1, r: -1, side: 2, type: "brick", ratio: 2 },
@@ -106,22 +118,7 @@ const LAND_4P: LandHex[] = [
   { q: 0, r: 3, terrain: "wheat", number: 6, region: "island-c" },
 ];
 
-const SEA_4P: Array<[number, number]> = [
-  [1, -3],
-  [-2, -2],
-  [-1, -2],
-  [0, -2],
-  [1, -2],
-  [1, -1],
-  [-3, -1],
-  [-4, 0],
-  [-5, 1],
-  [3, -1],
-  [3, 0],
-  [3, 1],
-  [2, 2],
-  [-1, 3],
-];
+const SEA_4P: Array<[number, number]> = waterCells(LAND_4P);
 
 const PORTS_4P: ScenarioPortSpec[] = [
   { q: -2, r: -1, side: 2, type: "generic", ratio: 3 },

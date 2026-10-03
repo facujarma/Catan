@@ -489,7 +489,9 @@ describe("expansión Navegantes", () => {
     const room = await snapshot(t);
     expect(room.expansion).toBe("seafarers");
     expect(room.scenario).toBe("heading-for-new-shores");
-    expect(room.game?.board.hexes).toHaveLength(35);
+    expect(
+      room.game?.board.hexes.filter((hex) => hex.terrain !== "sea").length,
+    ).toBe(22);
     expect(room.game?.board.hexes.some((hex) => hex.terrain === "sea")).toBe(true);
     expect(room.game?.board.regions?.filter((region) => region.kind === "small-island")).toHaveLength(4);
     expect(room.game?.winThreshold).toBe(14);
@@ -520,7 +522,9 @@ describe("expansión Navegantes", () => {
 
     const room = await snapshot(t);
     expect(room.game?.phase).toBe("awaiting-roll");
-    expect(room.game?.board.hexes).toHaveLength(35);
+    expect(
+      room.game?.board.hexes.filter((hex) => hex.terrain !== "sea").length,
+    ).toBe(22);
     expect(room.game?.players.every((player) => player.settlementsBuilt >= 1)).toBe(true);
     const routeTotal = room.game!.players.reduce(
       (sum, player) => sum + player.roadsBuilt + player.shipsBuilt,

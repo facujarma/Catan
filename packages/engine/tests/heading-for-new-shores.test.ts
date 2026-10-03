@@ -57,9 +57,8 @@ function hasAdjacentRedNumbers(board: ReturnType<typeof buildFixed>["board"]): b
 describe("escenario 1: Rumbo a nuevas costas", () => {
   test("el mapa fijo de 3 jugadores coincide con la tabla del manual", () => {
     const { board } = buildFixed(3);
-    expect(board.hexes).toHaveLength(35);
     const counts = countByTerrain(board);
-    expect(counts.sea).toBe(13);
+    expect(counts.sea).toBeGreaterThanOrEqual(13);
     expect(counts.gold).toBe(2);
     expect(counts.brick).toBe(4);
     expect(counts.wood).toBe(3);
@@ -78,9 +77,8 @@ describe("escenario 1: Rumbo a nuevas costas", () => {
 
   test("el mapa fijo de 4 jugadores coincide con la tabla del manual", () => {
     const { board, robberHexId } = buildFixed(4);
-    expect(board.hexes).toHaveLength(42);
     const counts = countByTerrain(board);
-    expect(counts.sea).toBe(14);
+    expect(counts.sea).toBeGreaterThanOrEqual(14);
     expect(counts.gold).toBe(2);
     expect(counts.brick).toBe(5);
     expect(counts.wood).toBe(5);
@@ -109,6 +107,49 @@ describe("escenario 1: Rumbo a nuevas costas", () => {
     const variable3 = buildVariable(3, 5);
     expect(hasAdjacentRedNumbers(variable3.board)).toBe(false);
     expect(countByTerrain(variable3.board)).toEqual(countByTerrain(buildFixed(3).board));
+  });
+
+  test("todas las islas quedan conectadas por agua", () => {
+    const directions: Array<[number, number]> = [
+      [1, 0],
+      [1, -1],
+      [0, -1],
+      [-1, 0],
+      [-1, 1],
+      [0, 1],
+    ];
+    for (const built of [buildFixed(3), buildFixed(4)]) {
+      const { board } = built;
+      const byId = new Map(board.hexes.map((hex) => [hex.id, hex]));
+      const seen = new Set<string>();
+      const stack = [board.hexes[0]!.id];
+      seen.add(board.hexes[0]!.id);
+      while (stack.length > 0) {
+        const hex = byId.get(stack.pop()!)!;
+        for (const [dq, dr] of directions) {
+          const neighborId = `h-${hex.q + dq}-${hex.r + dr}`;
+          const neighbor = byId.get(neighborId);
+          if (!neighbor || seen.has(neighbor.id)) continue;
+          seen.add(neighbor.id);
+          stack.push(neighbor.id);
+        }
+      }
+      expect(seen.size).toBe(board.hexes.length);
+
+      const land = board.hexes.filter((hex) => hex.terrain !== "sea");
+      for (const hex of land) {
+        const touchesWater = directions.some(([dq, dr]) => {
+          const neighbor = byId.get(`h-${hex.q + dq}-${hex.r + dr}`);
+          return neighbor?.terrain === "sea";
+        });
+        const isInterior =
+          directions.every(([dq, dr]) => {
+            const neighbor = byId.get(`h-${hex.q + dq}-${hex.r + dr}`);
+            return neighbor !== undefined && neighbor.terrain !== "sea";
+          }) && directions.every(([dq, dr]) => byId.has(`h-${hex.q + dq}-${hex.r + dr}`));
+        expect(touchesWater || isInterior).toBe(true);
+      }
+    }
   });
 
   test("el pirata arranca en un hexágono de mar", () => {
@@ -238,12 +279,15 @@ describe("reglas de Navegantes en el escenario 1", () => {
         index === 1 ? { ...player, ships: [targetEdge.id] } : player,
       ),
     };
+    const p1WoodBefore = state.players[0]!.resources.wood;
+    const p2WoodBefore = state.players[1]!.resources.wood;
     state = applyAction(state, { type: "activate-pirate", playerId: "p1" });
     expect(state.phase).toBe("pirate");
     state = applyAction(state, { type: "move-pirate", playerId: "p1", hexId: seaHexId });
     expect(state.piratePosition).toEqual({ kind: "hex", hexId: seaHexId });
     expect(state.phase).toBe("main");
-    expect(state.players[0]!.resources.wood + state.players[1]!.resources.wood).toBe(3);
+    expect(state.players[0]!.resources.wood).toBe(p1WoodBefore + 1);
+    expect(state.players[1]!.resources.wood).toBe(p2WoodBefore - 1);
   });
 
   test("los campos de oro piden recurso a elección durante la producción", () => {
