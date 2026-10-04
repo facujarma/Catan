@@ -34,6 +34,7 @@ export interface ScenarioVariantSpec {
   ports: ScenarioPortSpec[];
   robber: { q: number; r: number } | "desert" | "number-12";
   pirateStart?: { q: number; r: number };
+  forbidRedOnGold?: boolean;
   winThreshold: number;
   terrainPool: Array<Resource | "gold">;
   numbers: number[];

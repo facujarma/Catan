@@ -304,6 +304,15 @@ describe("reglas de A través del desierto", () => {
       expect(hasAdjacentRedNumbers(first.board)).toBe(false);
       expect(countByTerrain(first.board)).toEqual(countByTerrain(buildFixed(playerCount).board));
       expect(countNumbers(first.board)).toEqual(countNumbers(buildFixed(playerCount).board));
+      for (let seed = 1; seed <= 20; seed += 1) {
+        const golds = buildVariable(playerCount, seed).board.hexes.filter(
+          (hex) => hex.terrain === "gold",
+        );
+        expect(golds).toHaveLength(2);
+        for (const gold of golds) {
+          expect(gold.number === 6 || gold.number === 8).toBe(false);
+        }
+      }
     }
     const deserts = buildVariable(3, 99).board.hexes.filter((hex) => hex.terrain === "desert");
     expect(deserts.map((hex) => hex.id).sort()).toEqual(["h--1--1", "h-0--2", "h-1--3"]);

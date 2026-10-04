@@ -67,7 +67,7 @@ export function buildScenarioBoard(
   if (!variant) {
     throw new Error(`El escenario ${scenarioId} no tiene variante para ${playerCount} jugadores.`);
   }
-  const forbidRedOnGold = options.forbidRedOnGold ?? false;
+  const forbidRedOnGold = options.forbidRedOnGold ?? variant.forbidRedOnGold ?? false;
   const mainIslandNoGold = options.mainIslandNoGold ?? false;
 
   const landSlots = variant.hexes.filter((hex) => !hex.sea);
