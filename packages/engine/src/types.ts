@@ -63,6 +63,7 @@ export interface BoardRegion {
   kind: "main" | "small-island";
   bonusVp: number;
   startingArea: boolean;
+  exclusive?: boolean;
   hexIds: string[];
 }
 

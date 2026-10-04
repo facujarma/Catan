@@ -120,27 +120,40 @@ describe("escenario 4: A través del desierto (3 jugadores)", () => {
   });
 
   test("el setup solo permite poblados iniciales en la isla principal", () => {
-    const state = createGame({
-      players: playerConfigs(3),
-      seed: "desert-setup",
-      scenarioId: SCENARIO,
-      setupMode: "fixed",
-    });
-    const legal = getLegalSettlementPlacements(state, "p1");
-    expect(legal.length).toBeGreaterThan(0);
-    for (const vertexId of legal) {
-      expect(vertexTouchesStartingArea(state, vertexId)).toBe(true);
-    }
-    const islandHexIds = new Set(
-      state.board.regions!
-        .filter((region) => region.id !== "main")
-        .flatMap((region) => region.hexIds),
-    );
-    const islandOnlyVertex = state.board.vertices.find((vertex) =>
-      vertex.hexIds.every((hexId) => islandHexIds.has(hexId)),
-    );
-    if (islandOnlyVertex) {
-      expect(legal).not.toContain(islandOnlyVertex.id);
+    for (const playerCount of [3, 4] as const) {
+      const state = createGame({
+        players: playerConfigs(playerCount),
+        seed: `desert-setup-${playerCount}`,
+        scenarioId: SCENARIO,
+        setupMode: "fixed",
+      });
+      const legal = getLegalSettlementPlacements(state, "p1");
+      expect(legal.length).toBeGreaterThan(0);
+      for (const vertexId of legal) {
+        expect(vertexTouchesStartingArea(state, vertexId)).toBe(true);
+      }
+      const mainHexIds = new Set(
+        state.board.regions!.find((region) => region.id === "main")!.hexIds,
+      );
+      const hexById = new Map(state.board.hexes.map((hex) => [hex.id, hex]));
+      for (const vertexId of legal) {
+        const vertex = state.board.vertices.find((candidate) => candidate.id === vertexId)!;
+        for (const hexId of vertex.hexIds) {
+          const hex = hexById.get(hexId);
+          if (!hex || hex.terrain === "sea") continue;
+          expect(mainHexIds.has(hexId)).toBe(true);
+        }
+      }
+      const stripHexIds = new Set(
+        state.board.regions!.find((region) => region.id === "strip")!.hexIds,
+      );
+      const stripBorderVertex = state.board.vertices.find(
+        (vertex) =>
+          vertex.hexIds.some((hexId) => stripHexIds.has(hexId)) &&
+          vertex.hexIds.some((hexId) => mainHexIds.has(hexId)),
+      );
+      expect(stripBorderVertex).toBeDefined();
+      expect(legal).not.toContain(stripBorderVertex!.id);
     }
   });
 

@@ -189,6 +189,7 @@ export function buildScenarioBoard(
     kind: region.kind,
     bonusVp: region.bonusVp,
     startingArea: region.startingArea,
+    ...(region.exclusive ? { exclusive: true } : {}),
     hexIds: hexes
       .filter((hex) => hex.region === region.id)
       .map((hex) => hex.id)

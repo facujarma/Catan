@@ -3,7 +3,14 @@ import type { LandHex } from "./shared";
 import type { ScenarioDefinition, ScenarioPortSpec } from "./types";
 
 const REGIONS = [
-  { id: "main", name: "Isla principal", kind: "main" as const, bonusVp: 0, startingArea: true },
+  {
+    id: "main",
+    name: "Isla principal",
+    kind: "main" as const,
+    bonusVp: 0,
+    startingArea: true,
+    exclusive: true,
+  },
   {
     id: "strip",
     name: "Franja de tierra",

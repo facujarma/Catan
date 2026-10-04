@@ -16,6 +16,7 @@ export interface ScenarioRegionSpec {
   kind: "main" | "small-island";
   bonusVp: number;
   startingArea: boolean;
+  exclusive?: boolean;
 }
 
 export interface ScenarioPortSpec {

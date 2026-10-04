@@ -210,6 +210,29 @@ describe("reglas de Navegantes en el escenario 1", () => {
     }
   });
 
+  test("los vértices que tocan la isla principal y una isla chica siguen siendo legales en el setup", () => {
+    const state = createGame({
+      players: playerConfigs(3),
+      seed: "straddle",
+      scenarioId: SCENARIO,
+      setupMode: "fixed",
+    });
+    const regions = state.board.regions!;
+    const mainHexIds = new Set(regions.find((region) => region.id === "main")!.hexIds);
+    const smallHexIds = new Set(
+      regions
+        .filter((region) => region.kind === "small-island")
+        .flatMap((region) => region.hexIds),
+    );
+    const straddle = state.board.vertices.find(
+      (vertex) =>
+        vertex.hexIds.some((hexId) => mainHexIds.has(hexId)) &&
+        vertex.hexIds.some((hexId) => smallHexIds.has(hexId)),
+    );
+    expect(straddle).toBeDefined();
+    expect(getLegalSettlementPlacements(state, "p1")).toContain(straddle!.id);
+  });
+
   test("se puede construir un barco y luego moverlo", () => {
     let state = setupScenarioGame(3);
     state = toMain(withResources(state, { p1: { wood: 5, sheep: 5, brick: 5 } }));

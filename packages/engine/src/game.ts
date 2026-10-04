@@ -411,10 +411,19 @@ export function vertexTouchesStartingArea(state: GameState, vertexId: string): b
   if (!regions || regions.length === 0) return true;
   const startingRegions = regions.filter((region) => region.startingArea);
   if (startingRegions.length === 0) return true;
+  const startingHexIds = new Set(startingRegions.flatMap((region) => region.hexIds));
   const vertex = getVertex(state, vertexId);
-  return vertex.hexIds.some((hexId) =>
-    startingRegions.some((region) => region.hexIds.includes(hexId)),
-  );
+  if (!startingRegions.some((region) => region.exclusive === true)) {
+    return vertex.hexIds.some((hexId) => startingHexIds.has(hexId));
+  }
+  let touchesStarting = false;
+  for (const hexId of vertex.hexIds) {
+    const hex = state.board.hexes.find((candidate) => candidate.id === hexId);
+    if (!hex || hex.terrain === "sea") continue;
+    if (!startingHexIds.has(hexId)) return false;
+    touchesStarting = true;
+  }
+  return touchesStarting;
 }
 
 function canPlaceRoadOnBoard(
