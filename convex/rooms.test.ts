@@ -583,6 +583,42 @@ describe("expansión Navegantes", () => {
     );
     expect(routeTotal).toBeGreaterThanOrEqual(3);
   });
+
+  test("Through the Desert arranca con su tablero de 3 jugadores", async () => {
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.setScenario, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      scenario: "through-the-desert",
+    });
+    await t.mutation(api.rooms.setSetupMode, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      setupMode: "fixed",
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    const room = await snapshot(t);
+    expect(room.scenario).toBe("through-the-desert");
+    expect(
+      room.game?.board.hexes.filter((hex) => hex.terrain !== "sea"),
+    ).toHaveLength(25);
+    expect(room.game?.board.hexes.filter((hex) => hex.terrain === "desert")).toHaveLength(3);
+    expect(room.game?.board.ports).toHaveLength(8);
+    expect(room.game?.board.regions?.find((region) => region.id === "main")?.startingArea).toBe(
+      true,
+    );
+    expect(room.game?.winThreshold).toBe(14);
+    expect(room.game?.piratePosition?.kind).toBe("hex");
+  });
 });
 
 describe("opción sin oro en la isla principal", () => {

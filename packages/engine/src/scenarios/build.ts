@@ -2,7 +2,7 @@ import { buildBoardFromDrafts } from "../board";
 import { SeededRandom } from "../random";
 import type { RandomSource } from "../random";
 import type { Board, BoardRegion, Resource, Terrain } from "../types";
-import { getScenarioDefinition } from "./heading-for-new-shores";
+import { getScenarioDefinition } from "./index";
 import type { ScenarioPortSpec, ScenarioVariantSpec } from "./types";
 
 export type SetupMode = "fixed" | "variable";
@@ -63,7 +63,10 @@ export function buildScenarioBoard(
 ): BuiltScenario {
   const definition = getScenarioDefinition(scenarioId);
   if (!definition) throw new Error(`No existe el escenario ${scenarioId}.`);
-  const variant: ScenarioVariantSpec = definition.variants[String(playerCount) as "3" | "4"];
+  const variant = definition.variants[String(playerCount) as "3" | "4"];
+  if (!variant) {
+    throw new Error(`El escenario ${scenarioId} no tiene variante para ${playerCount} jugadores.`);
+  }
   const forbidRedOnGold = options.forbidRedOnGold ?? false;
   const mainIslandNoGold = options.mainIslandNoGold ?? false;
 
@@ -212,15 +215,26 @@ export function buildScenarioBoard(
     winThreshold: variant.winThreshold,
     setupMode,
     robberHexId: robberHex,
-    pirateHexId: buildPirateStart(hexes, regions),
+    pirateHexId: buildPirateStart(hexes, regions, variant),
   };
 }
 
 function buildPirateStart(
   hexes: ReadonlyArray<{ id: string; q: number; r: number; terrain: string }>,
   regions: readonly BoardRegion[],
+  variant: ScenarioVariantSpec,
 ): string | null {
   const seaHexes = hexes.filter((hex) => hex.terrain === "sea");
+  if (variant.pirateStart) {
+    const explicitId = hexId(variant.pirateStart.q, variant.pirateStart.r);
+    const explicitHex = hexes.find((hex) => hex.id === explicitId);
+    if (explicitHex?.terrain !== "sea") {
+      throw new Error(
+        `El pirata del escenario apunta a un hexágono de mar inexistente en (${variant.pirateStart.q},${variant.pirateStart.r}).`,
+      );
+    }
+    return explicitId;
+  }
   if (seaHexes.length === 0) return null;
 
   const mainRegion = regions.find((region) => region.kind === "main");

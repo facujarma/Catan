@@ -32,6 +32,7 @@ export interface ScenarioVariantSpec {
   regions: ScenarioRegionSpec[];
   ports: ScenarioPortSpec[];
   robber: { q: number; r: number } | "desert" | "number-12";
+  pirateStart?: { q: number; r: number };
   winThreshold: number;
   terrainPool: Array<Resource | "gold">;
   numbers: number[];
@@ -44,6 +45,6 @@ export interface ScenarioDefinition {
   id: string;
   name: string;
   description: string;
-  variants: Record<"3" | "4", ScenarioVariantSpec>;
+  variants: Partial<Record<"3" | "4", ScenarioVariantSpec>>;
   resourcePorts: Resource[];
 }

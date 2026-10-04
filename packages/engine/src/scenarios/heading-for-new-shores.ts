@@ -1,12 +1,6 @@
+import { cellsFor, nonDesertPool, numbersFrom, waterCells } from "./shared";
+import type { LandHex } from "./shared";
 import type { ScenarioDefinition, ScenarioPortSpec } from "./types";
-
-interface LandHex {
-  q: number;
-  r: number;
-  terrain: "wood" | "brick" | "sheep" | "wheat" | "ore" | "gold" | "desert";
-  number: number | null;
-  region: string;
-}
 
 const REGIONS_3P = [
   { id: "main", name: "Isla principal", kind: "main" as const, bonusVp: 0, startingArea: true },
@@ -69,21 +63,6 @@ const BOARD_ROWS_4P: Array<[number, number, number]> = [
   [2, -4, 1],
   [3, -4, 0],
 ];
-
-function waterCells(
-  land: LandHex[],
-  rows: ReadonlyArray<[number, number, number]>,
-): Array<[number, number]> {
-  const landKeys = new Set(land.map((hex) => `${hex.q},${hex.r}`));
-  const water: Array<[number, number]> = [];
-  for (const [r, qStart, qEnd] of rows) {
-    for (let q = qStart; q <= qEnd; q += 1) {
-      if (landKeys.has(`${q},${r}`)) continue;
-      water.push([q, r]);
-    }
-  }
-  return water;
-}
 
 const SEA_3P: Array<[number, number]> = waterCells(LAND_3P, BOARD_ROWS_3P);
 
@@ -160,31 +139,11 @@ const PORTS_4P: ScenarioPortSpec[] = [
   { q: 0, r: -1, side: 3, type: "ore", ratio: 2 },
 ];
 
-function nonDesertPool(
-  land: LandHex[],
-): Array<"wood" | "brick" | "sheep" | "wheat" | "ore" | "gold"> {
-  return land.flatMap((hex) => (hex.terrain === "desert" ? [] : [hex.terrain]));
-}
-
 const TERRAIN_POOL_3P = nonDesertPool(LAND_3P);
 const TERRAIN_POOL_4P = nonDesertPool(LAND_4P);
 
-const NUMBERS_3P = LAND_3P.flatMap((hex) => (hex.number === null ? [] : [hex.number]));
-const NUMBERS_4P = LAND_4P.flatMap((hex) => (hex.number === null ? [] : [hex.number]));
-
-function cellsFor(land: LandHex[], sea: Array<[number, number]>) {
-  return [
-    ...land.map((hex) => ({
-      q: hex.q,
-      r: hex.r,
-      terrain: hex.terrain,
-      number: hex.number,
-      region: hex.region,
-      desert: hex.terrain === "desert",
-    })),
-    ...sea.map(([q, r]) => ({ q, r, sea: true })),
-  ];
-}
+const NUMBERS_3P = numbersFrom(LAND_3P);
+const NUMBERS_4P = numbersFrom(LAND_4P);
 
 export const HEADING_FOR_NEW_SHORES: ScenarioDefinition = {
   id: "heading-for-new-shores",
@@ -221,9 +180,3 @@ export const HEADING_FOR_NEW_SHORES: ScenarioDefinition = {
     },
   },
 };
-
-export const SCENARIOS = [HEADING_FOR_NEW_SHORES];
-
-export function getScenarioDefinition(id: string): ScenarioDefinition | null {
-  return SCENARIOS.find((scenario) => scenario.id === id) ?? null;
-}

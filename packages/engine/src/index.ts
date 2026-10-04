@@ -45,7 +45,7 @@ export {
   createSeededScenarioRandom,
 } from "./scenarios/build";
 export type { BuiltScenario, SetupMode } from "./scenarios/build";
-export { getScenarioDefinition, SCENARIOS } from "./scenarios/heading-for-new-shores";
+export { getScenarioDefinition, SCENARIOS } from "./scenarios/index";
 export type {
   ScenarioDefinition,
   ScenarioHexSpec,
