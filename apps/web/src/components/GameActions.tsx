@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { RESOURCES } from "@catan/engine";
 import type { HeldDevelopmentCard, Resource, ResourceBundle } from "@catan/engine";
 import {
-  Dices,
   Eye,
   EyeOff,
   Handshake,
@@ -242,10 +241,6 @@ export default function GameActions({
 
   const pendingCount = game.self.pendingDiscardCount;
   const discardTotal = bundleTotal(discard);
-  const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
-  const currentPlayerIsBot = room.players.some(
-    (player) => player.id === game.currentPlayerId && player.isBot,
-  );
   const isPlayableTurn = isMyTurn && (game.phase === "main" || game.phase === "awaiting-roll");
   const readyToRoll = isMyTurn && game.phase === "awaiting-roll";
   const selfColor = selfPlayer?.color ?? "#3f4249";
@@ -417,56 +412,37 @@ export default function GameActions({
           className="flex min-w-[168px] flex-col items-center justify-center gap-0.5 border-x-2 border-[#e3cfa5] px-3 max-[1180px]:min-w-[150px] max-[1180px]:px-2 max-[940px]:min-w-0 max-[940px]:border-x-0 max-[940px]:border-y-2 max-[940px]:border-[#e3cfa5] max-[940px]:py-1.5"
           aria-label="Estado del turno"
         >
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#7a5320]">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full border border-[#8a5a1e]"
-              style={{ backgroundColor: currentPlayer?.color ?? "#5b6b78" }}
-            />
-            {isMyTurn
-              ? "Tu turno"
-              : `Turno de ${currentPlayerIsBot ? "🤖 " : ""}${currentPlayer?.name ?? "…"}`}
-          </div>
-          {rolling || game.lastRoll ? (
-            <div
-              className={`flex items-center gap-2 ${
-                !rolling && readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
-              }`}
-            >
-              <DieFace
-                value={rolling ? rollFaces?.[0] ?? 1 : game.lastRoll?.dice[0] ?? 1}
-                big={readyToRoll || rolling}
-                rolling={rolling}
-              />
-              <DieFace
-                value={rolling ? rollFaces?.[1] ?? 1 : game.lastRoll?.dice[1] ?? 1}
-                big={readyToRoll || rolling}
-                rolling={rolling}
-              />
-              {!rolling && game.lastRoll && (
-                <span className="font-display text-xl font-black text-[#4a2c12]">
-                  = {game.lastRoll.total}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span
-              className={`flex items-center gap-1 text-[11px] font-semibold text-[#b08a4a] ${
-                readyToRoll ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
-              }`}
-            >
-              <Dices size={13} /> Sin tirar
-            </span>
-          )}
-          {isMyTurn && game.phase === "awaiting-roll" ? (
+          {readyToRoll ? (
             <button
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border-2 border-[#8a5a1e] bg-gradient-to-b from-[#e8b25a] to-[#c98a34] px-4 font-display text-sm font-extrabold text-[#4a2c12] shadow-[0_3px_0_#8a5a1e] transition enabled:hover:brightness-105 enabled:active:translate-y-0.5 disabled:opacity-50"
               type="button"
+              className={`flex items-center gap-2 rounded-2xl transition enabled:cursor-pointer enabled:hover:brightness-110 enabled:active:translate-y-0.5 disabled:cursor-default ${
+                !rolling && !busy ? "animate-[turn-pulse_1.8s_ease-in-out_infinite]" : ""
+              }`}
+              title={rolling ? "Tirando…" : "Tirar dados"}
+              aria-label={rolling ? "Tirando…" : "Tirar dados"}
               disabled={busy || rolling}
               onClick={rollDice}
             >
-              <Dices size={16} /> {rolling ? "Tirando…" : "Tirar dados"}
+              <DieFace
+                value={rolling ? rollFaces?.[0] ?? 1 : game.lastRoll?.dice[0] ?? 1}
+                big
+                rolling={rolling}
+                empty={!rolling && !game.lastRoll}
+              />
+              <DieFace
+                value={rolling ? rollFaces?.[1] ?? 1 : game.lastRoll?.dice[1] ?? 1}
+                big
+                rolling={rolling}
+                empty={!rolling && !game.lastRoll}
+              />
             </button>
-          ) : isMyTurn && game.phase === "activate" ? (
+          ) : (
+            <div className="flex items-center gap-2">
+              <DieFace value={game.lastRoll?.dice[0] ?? 1} empty={!game.lastRoll} />
+              <DieFace value={game.lastRoll?.dice[1] ?? 1} empty={!game.lastRoll} />
+            </div>
+          )}
+          {isMyTurn && game.phase === "activate" ? (
             <span className="flex flex-wrap items-center justify-center gap-1.5">
               <button
                 className="inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50"
