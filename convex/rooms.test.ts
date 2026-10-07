@@ -2,7 +2,7 @@
 import type { GameAction, GameState } from "@catan/engine";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 type RemovePlayerId<T> = T extends { playerId: string } ? Omit<T, "playerId"> : never;
@@ -477,6 +477,56 @@ describe("bots", () => {
     room = await snapshot(t);
     expect(room.pausedAt).not.toBeNull();
     expect(room.pauseRequest).toBeNull();
+  });
+});
+
+describe("auto-pausa por desconexión", () => {
+  test("la sala se pausa cuando todos los humanos se desconectan", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await startRoomWithBots(t, { limit: 60 });
+    await t.mutation(api.rooms.heartbeat, { code: CODE, playerToken: HOST.playerToken });
+    let room = await snapshot(t);
+    expect(room.pausedAt).toBeNull();
+
+    vi.advanceTimersByTime(51_000);
+    await t.mutation(internal.rooms.cleanupPresence, {});
+    room = await snapshot(t);
+    expect(room.pausedAt).not.toBeNull();
+    expect(room.turnDeadlineAt).toBeNull();
+    expect(room.pauseRemainingMs).toBeGreaterThan(0);
+  });
+
+  test("no se pausa si queda al menos un humano online", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    const outro = {
+      playerId: "outro-player-00000000000000",
+      playerToken: "outro-token-00000000000000000000000000000",
+    };
+    await t.mutation(api.rooms.joinRoom, { code: CODE, ...outro, name: "Outro" });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: outro.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    await t.mutation(api.rooms.heartbeat, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.heartbeat, { code: CODE, playerToken: outro.playerToken });
+    vi.advanceTimersByTime(51_000);
+    await t.mutation(api.rooms.heartbeat, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(internal.rooms.cleanupPresence, {});
+
+    const room = await snapshot(t);
+    expect(room.pausedAt).toBeNull();
   });
 });
 

@@ -895,6 +895,7 @@ async function applyPauseOutcome(
   room: RoomDocument,
   game: GameStateDocument,
   request: { mode: "pause" | "resume"; requestedBy: string },
+  event?: { actorId?: string | null; actorName?: string; message?: string },
 ): Promise<void> {
   const now = Date.now();
   const actorName = playerName(room, request.requestedBy);
@@ -915,7 +916,14 @@ async function applyPauseOutcome(
       tradeRespondDeadlineAt: undefined,
       updatedAt: now,
     });
-    await writeEvent(ctx, room, request.requestedBy, actorName, "system", "La partida se pausó.");
+    await writeEvent(
+      ctx,
+      room,
+      event?.actorId ?? request.requestedBy,
+      event?.actorName ?? actorName,
+      "system",
+      event?.message ?? "La partida se pausó.",
+    );
     return;
   }
 
@@ -1793,6 +1801,41 @@ export const expireTradeResponses = internalMutation({
   },
 });
 
+async function autoPauseDisconnectedRoom(
+  ctx: MutationCtx,
+  roomId: RoomDocument["_id"],
+): Promise<void> {
+  const room = await ctx.db.get("rooms", roomId);
+  if (!room || room.status !== "playing") return;
+  const humans = room.players.filter((player) => player.isBot !== true);
+  if (humans.length === 0) return;
+
+  const presence = await ctx.db
+    .query("presence")
+    .withIndex("by_room", (index) => index.eq("roomId", roomId))
+    .take(MAX_ROOM_PLAYERS);
+  const online = new Set(presence.map((row) => row.playerId));
+  if (humans.some((player) => online.has(player.id))) return;
+
+  const game = await ctx.db
+    .query("gameStates")
+    .withIndex("by_room", (index) => index.eq("roomId", roomId))
+    .unique();
+  if (!game || isGamePaused(game)) return;
+
+  await applyPauseOutcome(
+    ctx,
+    room,
+    game,
+    { mode: "pause", requestedBy: room.hostPlayerId },
+    {
+      actorId: null,
+      actorName: "Mesa",
+      message: "La partida se pausó automáticamente: todos los jugadores se desconectaron.",
+    },
+  );
+}
+
 export const cleanupPresence = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -1801,7 +1844,9 @@ export const cleanupPresence = internalMutation({
       .query("presence")
       .withIndex("by_lastSeenAt", (index) => index.lt("lastSeenAt", cutoff))
       .take(100);
+    const affectedRoomIds = new Set(stale.map((row) => row.roomId));
     for (const row of stale) await ctx.db.delete(row._id);
+    for (const roomId of affectedRoomIds) await autoPauseDisconnectedRoom(ctx, roomId);
     return null;
   },
 });
