@@ -212,8 +212,6 @@ export default function GameRoom({
 
   const robberTargetName = pendingVictim?.hexId;
   const requiredPlentyCards = Math.min(2, RESOURCES.reduce((sum, resource) => sum + game.bank[resource], 0));
-  const otherPlayers = game.players.filter((player) => player.id !== room.selfPlayerId);
-  const selfPlayer = game.players.find((player) => player.id === room.selfPlayerId);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -308,6 +306,7 @@ export default function GameRoom({
     road: game.longestRoadHolderId,
     army: game.largestArmyHolderId,
   });
+  const awardToastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const previous = previousAwardsRef.current;
@@ -330,9 +329,19 @@ export default function GameRoom({
       playerName: holder?.name ?? "Un jugador",
       playerColor: holder?.color ?? "#d94b3d",
     });
-    const timer = window.setTimeout(() => setAwardToast(null), 4_500);
-    return () => window.clearTimeout(timer);
+    if (awardToastTimerRef.current !== null) window.clearTimeout(awardToastTimerRef.current);
+    awardToastTimerRef.current = window.setTimeout(() => {
+      awardToastTimerRef.current = null;
+      setAwardToast(null);
+    }, 4_500);
   }, [game.longestRoadHolderId, game.largestArmyHolderId, game.players]);
+
+  useEffect(
+    () => () => {
+      if (awardToastTimerRef.current !== null) window.clearTimeout(awardToastTimerRef.current);
+    },
+    [],
+  );
 
   const selfResourceCount = RESOURCES.reduce(
     (sum, resource) => sum + game.self.resources[resource],
@@ -480,25 +489,20 @@ export default function GameRoom({
           <h2 className="font-display text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#e8d3a8] max-[940px]:hidden">
             Jugadores
           </h2>
-          {otherPlayers.map((player) => (
-            <PlayerPanel
-              key={player.id}
-              player={player}
-              room={room}
-              longestRoad={game.longestRoadHolderId === player.id}
-              largestArmy={game.largestArmyHolderId === player.id}
-            />
-          ))}
-          {selfPlayer && (
-            <PlayerPanel
-              player={selfPlayer}
-              room={room}
-              self
-              totalPoints={game.self.totalVictoryPoints}
-              longestRoad={game.longestRoadHolderId === selfPlayer.id}
-              largestArmy={game.largestArmyHolderId === selfPlayer.id}
-            />
-          )}
+          {game.players.map((player) => {
+            const isSelf = player.id === room.selfPlayerId;
+            return (
+              <PlayerPanel
+                key={player.id}
+                player={player}
+                room={room}
+                self={isSelf}
+                {...(isSelf ? { totalPoints: game.self.totalVictoryPoints } : {})}
+                longestRoad={game.longestRoadHolderId === player.id}
+                largestArmy={game.largestArmyHolderId === player.id}
+              />
+            );
+          })}
         </aside>
 
         <section
