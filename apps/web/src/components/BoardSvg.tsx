@@ -701,7 +701,7 @@ function BoardSvg({
   }, [game.board.vertices]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden">
+    <div className="board-sea flex h-full w-full items-center justify-center overflow-hidden">
       <svg
         className="block h-full w-full"
         viewBox={`${boardBounds.x} ${boardBounds.y} ${boardBounds.width} ${boardBounds.height}`}
@@ -709,33 +709,6 @@ function BoardSvg({
         aria-label="Tablero de Catan"
       >
         <defs>
-          <linearGradient id="sea-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#46a4d1" />
-            <stop offset="0.5" stopColor="#328dc0" />
-            <stop offset="1" stopColor="#266f9d" />
-          </linearGradient>
-          <radialGradient id="sea-vignette" cx="0.5" cy="0.5" r="0.72">
-            <stop offset="0.55" stopColor="#062c47" stopOpacity="0" />
-            <stop offset="1" stopColor="#062c47" stopOpacity="0.34" />
-          </radialGradient>
-          <pattern id="sea-waves" width="130" height="64" patternUnits="userSpaceOnUse">
-            <path
-              d="M0 26 Q16 17 32 26 T64 26 T96 26 T128 26"
-              fill="none"
-              stroke="#ffffff"
-              strokeOpacity="0.09"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-            />
-            <path
-              d="M-16 56 Q0 47 16 56 T48 56 T80 56 T112 56"
-              fill="none"
-              stroke="#0b3a5c"
-              strokeOpacity="0.09"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-            />
-          </pattern>
           <linearGradient id="terrain-wood" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#5aa74c" />
             <stop offset="1" stopColor="#3f7f36" />
@@ -787,10 +760,6 @@ function BoardSvg({
             />
           </filter>
         </defs>
-
-        <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-gradient)" />
-        <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-waves)" />
-        <rect width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#sea-vignette)" />
 
         {coastPath && (
           <>
