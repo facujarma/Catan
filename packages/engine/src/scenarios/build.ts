@@ -39,17 +39,52 @@ function placementIsValid(
   return true;
 }
 
+interface NumberAvoidance {
+  terrains: readonly string[];
+  numbers: readonly number[];
+}
+
+// Los hexágonos restringidos toman primero una ficha permitida y el resto recibe lo
+// que sobra. Así la restricción se cumple siempre, sin depender de reintentos.
+function assignAvoidingNumbers(
+  hexes: Array<{ id: string; number: number | null; terrain: string; desert: boolean }>,
+  numbers: readonly number[],
+  random: RandomSource,
+  avoidance: NumberAvoidance,
+): boolean {
+  const isRestricted = (hex: { terrain: string; desert: boolean }) =>
+    !hex.desert && avoidance.terrains.includes(hex.terrain);
+  const pool = random.shuffle(numbers);
+  const restricted = random.shuffle(hexes.filter(isRestricted));
+  for (const hex of hexes) hex.number = null;
+  for (const hex of restricted) {
+    const index = pool.findIndex((number) => !avoidance.numbers.includes(number));
+    if (index === -1) return false;
+    hex.number = pool.splice(index, 1)[0]!;
+  }
+  const free = hexes.filter((hex) => !hex.desert && !isRestricted(hex));
+  free.forEach((hex, index) => {
+    hex.number = pool[index] ?? null;
+  });
+  return true;
+}
+
 function assignNumbers(
   hexes: Array<{ id: string; number: number | null; terrain: string; desert: boolean }>,
   neighborIds: ReadonlyMap<string, string[]>,
   numbers: readonly number[],
   random: RandomSource,
   forbidRedOnGold: boolean,
+  avoidance?: NumberAvoidance,
 ): void {
   for (let attempt = 0; attempt < 300; attempt += 1) {
-    const shuffled = random.shuffle(numbers);
-    let index = 0;
-    for (const hex of hexes) hex.number = hex.desert ? null : (shuffled[index++] ?? null);
+    if (avoidance) {
+      if (!assignAvoidingNumbers(hexes, numbers, random, avoidance)) continue;
+    } else {
+      const shuffled = random.shuffle(numbers);
+      let index = 0;
+      for (const hex of hexes) hex.number = hex.desert ? null : (shuffled[index++] ?? null);
+    }
     if (placementIsValid(hexes, neighborIds, forbidRedOnGold)) return;
   }
 }
@@ -160,7 +195,14 @@ export function buildScenarioBoard(
   }
 
   if (setupMode === "variable") {
-    assignNumbers(hexes, neighborIds, variant.numbers, random, forbidRedOnGold);
+    assignNumbers(
+      hexes,
+      neighborIds,
+      variant.numbers,
+      random,
+      forbidRedOnGold,
+      variant.variableAvoidNumbers,
+    );
   }
 
   const shouldRandomizePorts = setupMode === "variable" && variant.randomizePorts;
@@ -226,6 +268,7 @@ function buildPirateStart(
   variant: ScenarioVariantSpec,
 ): string | null {
   const seaHexes = hexes.filter((hex) => hex.terrain === "sea");
+  if (variant.pirateStart === "frame") return null;
   if (variant.pirateStart) {
     const explicitId = hexId(variant.pirateStart.q, variant.pirateStart.r);
     const explicitHex = hexes.find((hex) => hex.id === explicitId);

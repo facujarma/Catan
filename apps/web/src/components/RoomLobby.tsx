@@ -66,6 +66,10 @@ export default function RoomLobby({
       ? "Sin límite"
       : `${room.turnTimeLimitSeconds} segundos por turno`;
   const scenario = SCENARIOS.find((candidate) => candidate.id === (room.scenario ?? SCENARIOS[0]!.id));
+  // La opción de oro solo aplica a mapas que tienen campos de oro.
+  const scenarioHasGold = Object.values(scenario?.variants ?? {}).some((variant) =>
+    variant?.terrainPool.includes("gold"),
+  );
   const mapVariantLabel =
     room.players.length >= 4 ? "4 jugadores" : room.players.length === 3 ? "3 jugadores" : "3 o 4 jugadores";
   const expansionLabel = room.expansion === "seafarers" ? "Navegantes" : "Catan base";
@@ -161,7 +165,7 @@ export default function RoomLobby({
             {!me?.isHost && ` · ${room.setupMode === "variable" ? "Setup variable" : "Setup fijo"}`}
           </p>
         )}
-        {room.expansion === "seafarers" && (
+        {room.expansion === "seafarers" && scenarioHasGold && (
           <label className="mt-3 flex items-start gap-2 border-t-2 border-dashed border-[#e3cfa5] pt-3 text-xs font-semibold text-[#8a6a3a]">
             <input
               type="checkbox"

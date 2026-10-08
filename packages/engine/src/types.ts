@@ -60,7 +60,7 @@ export interface Port {
 export interface BoardRegion {
   id: string;
   name: string;
-  kind: "main" | "small-island";
+  kind: "main" | "small-island" | "island";
   bonusVp: number;
   startingArea: boolean;
   exclusive?: boolean;
@@ -94,6 +94,9 @@ export interface PlayerState {
   cities: string[];
   playedKnights: number;
   bonusVpTokens: BonusVpToken[];
+  // Islas donde el jugador fundó sus poblados iniciales. Son "natales" para él y
+  // no dan el bono de primer poblado. Ausente en partidas guardadas antes de este campo.
+  homeRegionIds?: string[];
 }
 
 export interface BonusVpToken {

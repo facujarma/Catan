@@ -176,6 +176,7 @@ export function createGame(options: CreateGameOptions): GameState {
     cities: [],
     playedKnights: 0,
     bonusVpTokens: [],
+    homeRegionIds: [],
   }));
 
   return {
@@ -255,6 +256,7 @@ function cloneGameState(state: GameState): GameState {
       settlements: [...player.settlements],
       cities: [...player.cities],
       bonusVpTokens: player.bonusVpTokens.map((token) => ({ ...token })),
+      homeRegionIds: [...(player.homeRegionIds ?? [])],
     })),
     bank: { ...state.bank },
     developmentDeck: state.developmentDeck.map((card) => ({ ...card })),
@@ -659,6 +661,21 @@ function distributeInitialResources(
   }
 }
 
+// Las islas de inicio donde el jugador funda sus poblados iniciales pasan a ser
+// sus islas natales. Solo cuentan regiones con area de inicio, así que las islas
+// chicas de otros escenarios nunca se marcan como natales.
+function markHomeRegions(state: GameState, player: PlayerState, vertexId: string): void {
+  const regions = state.board.regions ?? [];
+  const vertex = getVertex(state, vertexId);
+  const homeRegionIds = [...(player.homeRegionIds ?? [])];
+  for (const region of regions) {
+    if (!region.startingArea) continue;
+    if (!vertex.hexIds.some((hexId) => region.hexIds.includes(hexId))) continue;
+    if (!homeRegionIds.includes(region.id)) homeRegionIds.push(region.id);
+  }
+  player.homeRegionIds = homeRegionIds;
+}
+
 function awardRegionBonuses(state: GameState, player: PlayerState, vertexId: string): void {
   const regions = state.board.regions ?? [];
   if (regions.length === 0) return;
@@ -666,6 +683,7 @@ function awardRegionBonuses(state: GameState, player: PlayerState, vertexId: str
   for (const region of regions) {
     if (region.bonusVp <= 0) continue;
     if (!vertex.hexIds.some((hexId) => region.hexIds.includes(hexId))) continue;
+    if (player.homeRegionIds?.includes(region.id)) continue;
     if (player.bonusVpTokens.some((token) => token.regionId === region.id)) continue;
     player.bonusVpTokens.push({
       vertexId,
@@ -1114,6 +1132,7 @@ function placeSetupSettlement(state: GameState, playerId: string, vertexId: stri
   }
 
   player.settlements.push(vertexId);
+  markHomeRegions(state, player, vertexId);
   awardRegionBonuses(state, player, vertexId);
   state.setupRoadFromVertexId = vertexId;
   state.phase = "setup-road";

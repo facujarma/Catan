@@ -13,7 +13,7 @@ export interface ScenarioHexSpec {
 export interface ScenarioRegionSpec {
   id: string;
   name: string;
-  kind: "main" | "small-island";
+  kind: "main" | "small-island" | "island";
   bonusVp: number;
   startingArea: boolean;
   exclusive?: boolean;
@@ -33,8 +33,11 @@ export interface ScenarioVariantSpec {
   regions: ScenarioRegionSpec[];
   ports: ScenarioPortSpec[];
   robber: { q: number; r: number } | "desert" | "number-12";
-  pirateStart?: { q: number; r: number };
+  // Hexágono de mar donde empieza el pirata, o "frame" si empieza en el marco.
+  pirateStart?: { q: number; r: number } | "frame";
   forbidRedOnGold?: boolean;
+  // Solo en setup variable: estos terrenos no reciben las fichas numéricas indicadas.
+  variableAvoidNumbers?: { terrains: Resource[]; numbers: number[] };
   winThreshold: number;
   terrainPool: Array<Resource | "gold">;
   numbers: number[];

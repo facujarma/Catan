@@ -461,7 +461,7 @@ export default function GameActions({
                 <img className="h-5 w-auto" src={PIRATE_ICON_FILE} alt="" /> Pirata
               </button>
             </span>
-          ) : isMyTurn && game.phase === "pirate" ? (
+          ) : isMyTurn && game.phase === "pirate" && game.piratePosition?.kind === "hex" ? (
             <button
               className="inline-flex min-h-[30px] items-center gap-1 rounded-xl border-2 border-[#8a5a1e] bg-[#fdf6e3] px-2 font-display text-[11px] font-extrabold text-[#7a5320] shadow-[0_2px_0_#8a5a1e] transition enabled:hover:brightness-105 disabled:opacity-50"
               type="button"

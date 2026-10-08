@@ -669,6 +669,40 @@ describe("expansión Navegantes", () => {
     expect(room.game?.winThreshold).toBe(14);
     expect(room.game?.piratePosition?.kind).toBe("hex");
   });
+
+  test("Las cuatro islas arranca con su tablero, pirata en el marco y 13 PV", async () => {
+    const t = convexTest(schema, modules);
+    await createRoom(t);
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.addBot, { code: CODE, playerToken: HOST.playerToken });
+    await t.mutation(api.rooms.setScenario, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      scenario: "four-islands",
+    });
+    await t.mutation(api.rooms.setSetupMode, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      setupMode: "fixed",
+    });
+    await t.mutation(api.rooms.setReady, {
+      code: CODE,
+      playerToken: HOST.playerToken,
+      ready: true,
+    });
+    await startGameWithoutShuffle(t);
+
+    const room = await snapshot(t);
+    expect(room.scenario).toBe("four-islands");
+    const board = room.game!.board;
+    expect(board.hexes.filter((hex) => hex.terrain !== "sea")).toHaveLength(20);
+    expect(board.ports).toHaveLength(9);
+    expect(board.regions?.map((region) => region.kind)).toEqual(["island", "island", "island", "island"]);
+    expect(room.game?.winThreshold).toBe(13);
+    expect(room.game?.piratePosition).toEqual({ kind: "frame" });
+    const robber = board.hexes.find((hex) => hex.id === room.game?.robberHexId);
+    expect(robber?.number).toBe(12);
+  });
 });
 
 describe("opción sin oro en la isla principal", () => {

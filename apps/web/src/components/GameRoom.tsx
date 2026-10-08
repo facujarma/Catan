@@ -392,7 +392,10 @@ export default function GameRoom({
       return isMyTurn ? "Elegí a quién robarle una carta." : "El jugador activo está eligiendo a quién robar.";
     }
     if (game.phase === "pirate") {
-      return isMyTurn ? "Elegí un hexágono de mar para el pirata (o el marco)." : "El jugador activo está moviendo al pirata.";
+      if (!isMyTurn) return "El jugador activo está moviendo al pirata.";
+      return game.piratePosition?.kind === "hex"
+        ? "Elegí un hexágono de mar para el pirata (o el marco)."
+        : "Elegí un hexágono de mar para el pirata.";
     }
     if (game.phase === "pirate-victim") {
       return isMyTurn ? "Elegí a quién robarle una carta con el pirata." : "El jugador activo está eligiendo a quién robar.";
