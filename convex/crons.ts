@@ -5,7 +5,7 @@ const crons = cronJobs();
 
 crons.interval(
   "limpiar presencia inactiva",
-  { seconds: 15 },
+  { seconds: 60 },
   internal.rooms.cleanupPresence,
   {},
 );

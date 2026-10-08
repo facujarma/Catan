@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerGameView } from "@catan/engine";
 import {
   GENERIC_PORT_FILE,
@@ -61,13 +61,13 @@ function pointsForHex(q: number, r: number, radius = 1): string {
   }).join(" ");
 }
 
-function coastlinePath(game: PlayerGameView): string {
+function coastlinePath(board: PlayerGameView["board"]): string {
   const coastalVertexIds = new Set(
-    game.board.edges
+    board.edges
       .filter((edge) => edge.hexIds.length === 1)
       .flatMap((edge) => edge.vertexIds),
   );
-  const boundary = game.board.vertices
+  const boundary = board.vertices
     .filter((vertex) => coastalVertexIds.has(vertex.id))
     .sort((left, right) => Math.atan2(left.y, left.x) - Math.atan2(right.y, right.x))
     .map((vertex, index) => {
@@ -269,7 +269,247 @@ function ownerAtVertex(game: PlayerGameView, vertexId: string): string | null {
   );
 }
 
-export default function BoardSvg({
+// Cada celda maneja su propio hover: mover el mouse re-renderiza solo esa celda,
+// no el tablero completo (~600 nodos SVG con filtros).
+interface EdgeCellProps {
+  edgeId: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  ownerColor: string | undefined;
+  shipOwnerColor: string | undefined;
+  isSelected: boolean;
+  isSelectedShip: boolean;
+  isMoveTarget: boolean;
+  isBuildable: boolean;
+  onEdgeClick: (edgeId: string) => void;
+}
+
+const EdgeCell = memo(function EdgeCell({
+  edgeId,
+  x1,
+  y1,
+  x2,
+  y2,
+  ownerColor,
+  shipOwnerColor,
+  isSelected,
+  isSelectedShip,
+  isMoveTarget,
+  isBuildable,
+  onEdgeClick,
+}: EdgeCellProps) {
+  const [hovered, setHovered] = useState(false);
+
+  if (!ownerColor && !shipOwnerColor && !isMoveTarget && !isBuildable) return null;
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const roadLength = SCALE * 0.96;
+  const roadWidth = roadLength * (40 / 194);
+  const shipLength = SCALE * 0.58;
+  const shipWidth = shipLength * (90.21 / 104.43);
+  const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
+
+  return (
+    <g>
+      {ownerColor && (
+        <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
+          <image
+            href={pieceFile("road", ownerColor)}
+            x={midX - roadWidth / 2}
+            y={midY - roadLength / 2}
+            width={roadWidth}
+            height={roadLength}
+          />
+        </g>
+      )}
+      {shipOwnerColor && (
+        <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
+          <image
+            href={pieceFile("ship", shipOwnerColor)}
+            x={midX - shipWidth / 2}
+            y={midY - shipLength / 2}
+            width={shipWidth}
+            height={shipLength}
+          />
+          {isSelectedShip && (
+            <circle cx={midX} cy={midY} r={shipWidth * 0.75} fill="#f5d35f" fillOpacity="0.35" />
+          )}
+        </g>
+      )}
+      {isMoveTarget && (
+        <g
+          className="cursor-pointer transition hover:brightness-110"
+          onClick={() => onEdgeClick(edgeId)}
+        >
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke="#93c5fd"
+            strokeOpacity="0.85"
+            strokeWidth="12"
+            strokeLinecap="round"
+          />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="22" />
+        </g>
+      )}
+      {isBuildable && (
+        <g
+          className="cursor-pointer"
+          onClick={() => onEdgeClick(edgeId)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          {(isSelected || hovered) && (
+            <line
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="#ffe08a"
+              strokeOpacity={hovered ? 0.75 : 0.5}
+              strokeWidth={hovered ? 28 : 22}
+              strokeLinecap="round"
+              className={hovered ? "animate-pulse" : ""}
+            />
+          )}
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={isSelected || hovered ? "#f5d35f" : "#ffffff"}
+            strokeOpacity={isSelected || hovered ? 0.65 : 0.3}
+            strokeWidth={hovered ? 20 : 17}
+            strokeLinecap="round"
+          />
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={isSelected || hovered ? "#ffd76a" : "#f3c93f"}
+            strokeWidth={isSelected || hovered ? 9.5 : 6.5}
+            strokeDasharray={isSelected || hovered ? undefined : "7 7"}
+            strokeLinecap="round"
+          />
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="28" />
+        </g>
+      )}
+    </g>
+  );
+});
+
+interface VertexCellProps {
+  vertexId: string;
+  cx: number;
+  cy: number;
+  ownerColor: string | undefined;
+  isCity: boolean;
+  showBuildable: boolean;
+  activeMode: BoardMode;
+  onVertexClick: (vertexId: string) => void;
+}
+
+const VertexCell = memo(function VertexCell({
+  vertexId,
+  cx,
+  cy,
+  ownerColor,
+  isCity,
+  showBuildable,
+  activeMode,
+  onVertexClick,
+}: VertexCellProps) {
+  const [hovered, setHovered] = useState(false);
+
+  if (!ownerColor && !showBuildable) return null;
+
+  return (
+    <g>
+      {ownerColor && (
+        <g pointerEvents="none">
+          <ellipse
+            cx={cx}
+            cy={cy + 11}
+            rx={isCity ? 18 : 12}
+            ry={isCity ? 4.6 : 3.4}
+            fill="#04182a"
+            opacity="0.25"
+          />
+          <image
+            href={pieceFile(isCity ? "city" : "settlement", ownerColor)}
+            x={cx - (isCity ? 27 : 22)}
+            y={cy - (isCity ? 34 : 28)}
+            width={isCity ? 54 : 44}
+            height={isCity ? 54 : 44}
+          />
+        </g>
+      )}
+      {showBuildable && (
+        <g
+          className="cursor-pointer"
+          onClick={() => onVertexClick(vertexId)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          aria-label={activeMode === "city" ? "Mejorar a ciudad" : "Construir poblado"}
+        >
+          <circle
+            cx={cx}
+            cy={cy}
+            r={hovered ? 23 : 18}
+            fill={hovered ? "#ffe08a" : "none"}
+            fillOpacity="0.35"
+            stroke="#ffe08a"
+            strokeWidth={hovered ? 4.5 : 2.6}
+            strokeDasharray="5 5"
+          />
+          {activeMode === "settlement" ? (
+            <g
+              transform={
+                hovered
+                  ? `translate(${cx} ${cy}) scale(1.2) translate(${-cx} ${-cy})`
+                  : undefined
+              }
+            >
+              <path
+                d={`M${cx - 8} ${cy + 7} V${cy - 1} H${cx + 8} V${cy + 7} Z`}
+                fill="#ffffff"
+                stroke="#6d5c33"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+              <path
+                d={`M${cx - 10.5} ${cy - 1} L${cx} ${cy - 10.5} L${cx + 10.5} ${cy - 1} Z`}
+                fill="#e6d7ab"
+                stroke="#6d5c33"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+            </g>
+          ) : (
+            <circle
+              cx={cx}
+              cy={cy}
+              r={hovered ? 14 : 11}
+              fill="#fff3c4"
+              fillOpacity={hovered ? 0.85 : 0.6}
+              stroke="#ffffff"
+              strokeWidth="1.6"
+            />
+          )}
+          <circle cx={cx} cy={cy} r="26" fill="transparent" />
+        </g>
+      )}
+    </g>
+  );
+});
+
+function BoardSvg({
   game,
   legal,
   selfPlayerId,
@@ -283,8 +523,6 @@ export default function BoardSvg({
   const isMyTurn = game.currentPlayerId === selfPlayerId;
   const rolledTotal = game.lastRoll?.total ?? null;
   const rollKey = game.lastRoll ? `${game.lastRoll.dice[0]}-${game.lastRoll.dice[1]}` : null;
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
   const lastRollKeyRef = useRef<string | null>(rollKey);
   const [robberFlight, setRobberFlight] = useState<{ from: string; to: string; key: number } | null>(
@@ -320,19 +558,32 @@ export default function BoardSvg({
       : game.phase === "main" && isMyTurn
         ? mode
         : null;
-  const playerById = new Map(game.players.map((player) => [player.id, player]));
-  const edgeById = new Map(game.board.edges.map((edge) => [edge.id, edge]));
-  const vertexById = new Map(game.board.vertices.map((vertex) => [vertex.id, vertex]));
+  const playerById = useMemo(
+    () => new Map(game.players.map((player) => [player.id, player])),
+    [game.players],
+  );
+  const edgeById = useMemo(
+    () => new Map(game.board.edges.map((edge) => [edge.id, edge])),
+    [game.board.edges],
+  );
+  const vertexById = useMemo(
+    () => new Map(game.board.vertices.map((vertex) => [vertex.id, vertex])),
+    [game.board.vertices],
+  );
   const self = playerById.get(selfPlayerId);
-  const hasSeaHexes = game.board.hexes.some((hex) => hex.terrain === "sea");
+  const hasSeaHexes = useMemo(
+    () => game.board.hexes.some((hex) => hex.terrain === "sea"),
+    [game.board.hexes],
+  );
   const pirateHexId =
     game.piratePosition && game.piratePosition.kind === "hex"
       ? game.piratePosition.hexId
       : null;
-  const shipMoveTargets = new Set(
-    selectedShipId ? (legal.shipMoveTargets[selectedShipId] ?? []) : [],
+  const shipMoveTargets = useMemo(
+    () => new Set(selectedShipId ? (legal.shipMoveTargets[selectedShipId] ?? []) : []),
+    [selectedShipId, legal],
   );
-  const movableShips = new Set(legal.movableShipIds);
+  const movableShips = useMemo(() => new Set(legal.movableShipIds), [legal]);
 
   const canPlaceFreeRoad = (edgeId: string): boolean => {
     if (!self || selectedRoadIds.includes(edgeId) || self.roadIds.length + selectedRoadIds.length >= 15) {
@@ -383,29 +634,44 @@ export default function BoardSvg({
     });
   };
 
-  const legalVertexIds = new Set(
-    activeMode === "settlement"
-      ? legal.settlementVertexIds
-      : activeMode === "city"
-        ? legal.cityVertexIds
-        : [],
+  const legalVertexIds = useMemo(
+    () =>
+      new Set(
+        activeMode === "settlement"
+          ? legal.settlementVertexIds
+          : activeMode === "city"
+            ? legal.cityVertexIds
+            : [],
+      ),
+    [activeMode, legal],
   );
-  const legalEdgeIds = new Set(
-    activeMode === "road"
-      ? legal.roadIds
-      : activeMode === "free-road"
-        ? legal.freeRoadIds
-        : activeMode === "ship"
-          ? legal.shipIds
-          : [],
+  const legalEdgeIds = useMemo(
+    () =>
+      new Set(
+        activeMode === "road"
+          ? legal.roadIds
+          : activeMode === "free-road"
+            ? legal.freeRoadIds
+            : activeMode === "ship"
+              ? legal.shipIds
+              : [],
+      ),
+    [activeMode, legal],
   );
-  const robberTargets = new Set(activeMode === "robber" ? legal.robberHexIds : []);
-  const pirateTargets = new Set(
-    game.phase === "pirate" && isMyTurn ? legal.pirateTargetHexIds : [],
+  const robberTargets = useMemo(
+    () => new Set(activeMode === "robber" ? legal.robberHexIds : []),
+    [activeMode, legal],
   );
-  const coastPath = hasSeaHexes ? "" : coastlinePath(game);
+  const pirateTargets = useMemo(
+    () => new Set(game.phase === "pirate" && isMyTurn ? legal.pirateTargetHexIds : []),
+    [game.phase, isMyTurn, legal],
+  );
+  const coastPath = useMemo(
+    () => (hasSeaHexes ? "" : coastlinePath(game.board)),
+    [hasSeaHexes, game.board],
+  );
 
-  const boardBounds = (() => {
+  const boardBounds = useMemo(() => {
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -425,7 +691,7 @@ export default function BoardSvg({
       width: maxX - minX + padding * 2,
       height: maxY - minY + padding * 2,
     };
-  })();
+  }, [game.board.vertices]);
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden">
@@ -649,7 +915,6 @@ export default function BoardSvg({
                     stroke="#ffe08a"
                     strokeWidth="2.6"
                     strokeDasharray="8 6"
-                    className="animate-pulse"
                   />
                 </g>
               )}
@@ -662,7 +927,6 @@ export default function BoardSvg({
                     stroke="#93c5fd"
                     strokeWidth="2.6"
                     strokeDasharray="8 6"
-                    className="animate-pulse"
                   />
                 </g>
               )}
@@ -784,7 +1048,6 @@ export default function BoardSvg({
           const shipOwnerId = game.players.find((player) => player.shipIds.includes(edge.id))?.id;
           const shipOwner = shipOwnerId ? playerById.get(shipOwnerId) : undefined;
           const isSelected = selectedRoadIds.includes(edge.id);
-          const isHovered = hoveredEdgeId === edge.id;
           const isSelectedShip = selectedShipId === edge.id;
           const isMovableShip = activeMode === "move-ship" && movableShips.has(edge.id);
           const isMoveTarget = activeMode === "move-ship" && shipMoveTargets.has(edge.id);
@@ -799,118 +1062,22 @@ export default function BoardSvg({
                   : activeMode === "ship"
                     ? legalEdgeIds.has(edge.id)
                     : false));
-          const midX = (x1 + x2) / 2;
-          const midY = (y1 + y2) / 2;
-          const roadLength = SCALE * 0.96;
-          const roadWidth = roadLength * (40 / 194);
-          const shipLength = SCALE * 0.58;
-          const shipWidth = shipLength * (90.21 / 104.43);
-          const rotation = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
           return (
-            <g key={edge.id}>
-              {owner && (
-                <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
-                  <image
-                    href={pieceFile("road", owner.color)}
-                    x={midX - roadWidth / 2}
-                    y={midY - roadLength / 2}
-                    width={roadWidth}
-                    height={roadLength}
-                  />
-                </g>
-              )}
-              {shipOwner && (
-                <g pointerEvents="none" transform={`rotate(${rotation} ${midX} ${midY})`}>
-                  <image
-                    href={pieceFile("ship", shipOwner.color)}
-                    x={midX - shipWidth / 2}
-                    y={midY - shipLength / 2}
-                    width={shipWidth}
-                    height={shipLength}
-                  />
-                  {isSelectedShip && (
-                    <circle cx={midX} cy={midY} r={shipWidth * 0.75} fill="#f5d35f" fillOpacity="0.35" />
-                  )}
-                </g>
-              )}
-              {isMoveTarget && (
-                <g
-                  className="cursor-pointer transition hover:brightness-110"
-                  onClick={() => onEdgeClick(edge.id)}
-                >
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="#93c5fd"
-                    strokeOpacity="0.85"
-                    strokeWidth="12"
-                    strokeLinecap="round"
-                  />
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="transparent"
-                    strokeWidth="22"
-                  />
-                </g>
-              )}
-              {isBuildable && (
-                <g
-                  className="cursor-pointer"
-                  onClick={() => onEdgeClick(edge.id)}
-                  onMouseEnter={() => setHoveredEdgeId(edge.id)}
-                  onMouseLeave={() =>
-                    setHoveredEdgeId((current) => (current === edge.id ? null : current))
-                  }
-                >
-                  {(isSelected || isHovered) && (
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="#ffe08a"
-                      strokeOpacity={isHovered ? 0.75 : 0.5}
-                      strokeWidth={isHovered ? 28 : 22}
-                      strokeLinecap="round"
-                      className={isHovered ? "animate-pulse" : ""}
-                    />
-                  )}
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={isSelected || isHovered ? "#f5d35f" : "#ffffff"}
-                    strokeOpacity={isSelected || isHovered ? 0.65 : 0.3}
-                    strokeWidth={isHovered ? 20 : 17}
-                    strokeLinecap="round"
-                  />
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={isSelected || isHovered ? "#ffd76a" : "#f3c93f"}
-                    strokeWidth={isSelected || isHovered ? 9.5 : 6.5}
-                    strokeDasharray={isSelected || isHovered ? undefined : "7 7"}
-                    strokeLinecap="round"
-                  />
-                  <line
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="transparent"
-                    strokeWidth="28"
-                  />
-                </g>
-              )}
-            </g>
+            <EdgeCell
+              key={edge.id}
+              edgeId={edge.id}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              ownerColor={owner?.color}
+              shipOwnerColor={shipOwner?.color}
+              isSelected={isSelected}
+              isSelectedShip={isSelectedShip}
+              isMoveTarget={isMoveTarget}
+              isBuildable={isBuildable}
+              onEdgeClick={onEdgeClick}
+            />
           );
         })}
 
@@ -919,90 +1086,23 @@ export default function BoardSvg({
           const ownerId = ownerAtVertex(game, vertex.id);
           const owner = ownerId ? playerById.get(ownerId) : undefined;
           const isCity = owner?.cityVertexIds.includes(vertex.id) ?? false;
-          const isBuildable = legalVertexIds.has(vertex.id);
           return (
-            <g key={vertex.id}>
-              {owner && (
-                <g pointerEvents="none">
-                  <ellipse
-                    cx={cx}
-                    cy={cy + 11}
-                    rx={isCity ? 18 : 12}
-                    ry={isCity ? 4.6 : 3.4}
-                    fill="#04182a"
-                    opacity="0.25"
-                  />
-                  <image
-                    href={pieceFile(isCity ? "city" : "settlement", owner.color)}
-                    x={cx - (isCity ? 27 : 22)}
-                    y={cy - (isCity ? 34 : 28)}
-                    width={isCity ? 54 : 44}
-                    height={isCity ? 54 : 44}
-                  />
-                </g>
-              )}
-              {isBuildable && isMyTurn && (
-                <g
-                  className="cursor-pointer"
-                  onClick={() => onVertexClick(vertex.id)}
-                  onMouseEnter={() => setHoveredVertexId(vertex.id)}
-                  onMouseLeave={() =>
-                    setHoveredVertexId((current) => (current === vertex.id ? null : current))
-                  }
-                  aria-label={activeMode === "city" ? "Mejorar a ciudad" : "Construir poblado"}
-                >
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={hoveredVertexId === vertex.id ? 23 : 18}
-                    fill={hoveredVertexId === vertex.id ? "#ffe08a" : "none"}
-                    fillOpacity="0.35"
-                    stroke="#ffe08a"
-                    strokeWidth={hoveredVertexId === vertex.id ? 4.5 : 2.6}
-                    strokeDasharray="5 5"
-                    className="animate-pulse"
-                  />
-                  {activeMode === "settlement" ? (
-                    <g
-                      transform={
-                        hoveredVertexId === vertex.id
-                          ? `translate(${cx} ${cy}) scale(1.2) translate(${-cx} ${-cy})`
-                          : undefined
-                      }
-                    >
-                      <path
-                        d={`M${cx - 8} ${cy + 7} V${cy - 1} H${cx + 8} V${cy + 7} Z`}
-                        fill="#ffffff"
-                        stroke="#6d5c33"
-                        strokeWidth="1.4"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d={`M${cx - 10.5} ${cy - 1} L${cx} ${cy - 10.5} L${cx + 10.5} ${cy - 1} Z`}
-                        fill="#e6d7ab"
-                        stroke="#6d5c33"
-                        strokeWidth="1.4"
-                        strokeLinejoin="round"
-                      />
-                    </g>
-                  ) : (
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={hoveredVertexId === vertex.id ? 14 : 11}
-                      fill="#fff3c4"
-                      fillOpacity={hoveredVertexId === vertex.id ? 0.85 : 0.6}
-                      stroke="#ffffff"
-                      strokeWidth="1.6"
-                    />
-                  )}
-                  <circle cx={cx} cy={cy} r="26" fill="transparent" />
-                </g>
-              )}
-            </g>
+            <VertexCell
+              key={vertex.id}
+              vertexId={vertex.id}
+              cx={cx}
+              cy={cy}
+              ownerColor={owner?.color}
+              isCity={isCity}
+              showBuildable={legalVertexIds.has(vertex.id) && isMyTurn}
+              activeMode={activeMode}
+              onVertexClick={onVertexClick}
+            />
           );
         })}
       </svg>
     </div>
   );
 }
+
+export default memo(BoardSvg);

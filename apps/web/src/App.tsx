@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { ConvexProvider, ConvexReactClient, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
@@ -136,10 +136,13 @@ function CatanApp() {
     roomId ? { roomId } : "skip",
   ) as GameEvent[] | undefined;
 
+  // La presencia cambia cada pocos segundos; fuera del snapshot para no recrear `room`
+  // (y con él, re-renderizar todo el juego en cada latido).
+  const onlinePlayerIds = useMemo(() => new Set(presence ?? []), [presence]);
+
   const room = useMemo<RoomSnapshot | null | undefined>(() => {
     if (roomInfo === undefined) return undefined;
     if (roomInfo === null) return null;
-    const onlineIds = new Set(presence ?? []);
     const game: PlayerGameView | null =
       publicGame && board && selfInfo
         ? { ...publicGame.view, board, self: selfInfo.view }
@@ -149,10 +152,7 @@ function CatanApp() {
       status: roomInfo.status,
       hostPlayerId: roomInfo.hostPlayerId,
       selfPlayerId: roomInfo.selfPlayerId,
-      players: roomInfo.players.map((player) => ({
-        ...player,
-        online: player.isBot || onlineIds.has(player.id),
-      })),
+      players: roomInfo.players,
       turnTimeLimitSeconds: roomInfo.turnTimeLimitSeconds,
       turnDeadlineAt: publicGame?.turnDeadlineAt ?? null,
       tradeRespondDeadlineAt: publicGame?.tradeRespondDeadlineAt ?? null,
@@ -167,7 +167,7 @@ function CatanApp() {
       game,
       legal: selfInfo?.legal ?? EMPTY_LEGAL,
     };
-  }, [roomInfo, publicGame, board, selfInfo, presence]);
+  }, [roomInfo, publicGame, board, selfInfo]);
 
   const createRoomMutation = useMutation(api.rooms.createRoom);
   const joinRoomMutation = useMutation(api.rooms.joinRoom);
@@ -188,8 +188,12 @@ function CatanApp() {
   const leaveRoomMutation = useMutation(api.rooms.leaveRoom);
   const sendMessageMutation = useMutation(api.rooms.sendMessage);
 
-  const run = async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
-    if (busy) return undefined;
+  // `busy` en un ref para que `run` sea estable y no invalide los callbacks memoizados
+  // que llegan hasta BoardSvg.
+  const busyRef = useRef(false);
+  const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
+    if (busyRef.current) return undefined;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -199,9 +203,10 @@ function CatanApp() {
       setError(readError(cause));
       return undefined;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
-  };
+  }, []);
 
   const enterRoom = (code: string) => {
     const normalized = code.toUpperCase();
@@ -350,12 +355,15 @@ function CatanApp() {
     await run(() => startGameMutation({ code: roomCode, playerToken: identity.playerToken }));
   };
 
-  const submitGameAction = async (action: GameActionPayload) => {
-    if (!roomCode) return;
-    await run(() =>
-      applyActionMutation({ code: roomCode, playerToken: identity.playerToken, action }),
-    );
-  };
+  const submitGameAction = useCallback(
+    async (action: GameActionPayload) => {
+      if (!roomCode) return;
+      await run(() =>
+        applyActionMutation({ code: roomCode, playerToken: identity.playerToken, action }),
+      );
+    },
+    [roomCode, run, applyActionMutation, identity.playerToken],
+  );
 
   const requestPause = async (mode: "pause" | "resume") => {
     if (!roomCode) return;
@@ -494,6 +502,7 @@ function CatanApp() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <RoomLobby
             room={room}
+            onlinePlayerIds={onlinePlayerIds}
             name={name}
             busy={busy}
             onNameChange={setName}
@@ -523,6 +532,7 @@ function CatanApp() {
         room={room}
         messages={messages ?? []}
         events={events ?? []}
+        onlinePlayerIds={onlinePlayerIds}
         busy={busy}
         onAction={submitGameAction}
         onSendMessage={sendMessage}

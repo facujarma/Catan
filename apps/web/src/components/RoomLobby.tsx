@@ -4,6 +4,7 @@ import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD } from "../u
 
 interface RoomLobbyProps {
   room: RoomSnapshot;
+  onlinePlayerIds: ReadonlySet<string>;
   name: string;
   busy: boolean;
   onNameChange: (name: string) => void;
@@ -34,6 +35,7 @@ const TURN_TIME_OPTIONS = [
 
 export default function RoomLobby({
   room,
+  onlinePlayerIds,
   name,
   busy,
   onNameChange,
@@ -246,7 +248,7 @@ export default function RoomLobby({
           >
             <span
               className={`h-3 w-3 shrink-0 rounded-full ${
-                player.online ? "bg-[#7fb04a]" : "bg-[#c9bfa6]"
+                player.isBot || onlinePlayerIds.has(player.id) ? "bg-[#7fb04a]" : "bg-[#c9bfa6]"
               }`}
             />
             <span className="min-w-0 flex-1 truncate font-bold text-[#4a2c12]">

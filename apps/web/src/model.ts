@@ -11,7 +11,6 @@ export interface RoomPlayer {
   isBot: boolean;
   isHost: boolean;
   isSelf: boolean;
-  online: boolean;
 }
 
 export interface TurnStat {

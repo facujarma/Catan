@@ -9,8 +9,10 @@ interface FeedPanelProps {
   onSend: (body: string) => Promise<void>;
 }
 
+const TIME_FORMATTER = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" });
+
 function timeLabel(timestamp: number): string {
-  return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(timestamp);
+  return TIME_FORMATTER.format(timestamp);
 }
 
 export default function FeedPanel({ messages, events, disabled = false, onSend }: FeedPanelProps) {

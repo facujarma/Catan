@@ -66,7 +66,7 @@ que corresponda; no volver a una query única que lea todo.
 3. **Presencia/heartbeat jamás en docs que leen queries pesadas.**
    `getRoom`/`getGame`/`getSelf` NO deben leer `presence`; usar `getPresence`.
    Un heartbeat solo escribe su doc de presencia. `cleanupPresence` materializa
-   "offline" cada 15 s (no calcular online con `Date.now()` en queries).
+   "offline" cada 60 s (no calcular online con `Date.now()` en queries).
 4. **Autenticación barata:** `heartbeat`, `sendMessage`, `getSelf` y los jobs
    programados validan identidad contra el `rooms` chico, nunca contra un doc
    con estado de partida.

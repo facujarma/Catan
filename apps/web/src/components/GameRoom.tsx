@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { RESOURCES } from "@catan/engine";
 import type {
@@ -35,6 +35,7 @@ interface GameRoomProps {
   room: RoomSnapshot;
   messages: ChatMessage[];
   events: GameEvent[];
+  onlinePlayerIds: ReadonlySet<string>;
   busy: boolean;
   onAction: (action: GameActionPayload) => Promise<void>;
   onSendMessage: (body: string) => Promise<void>;
@@ -54,6 +55,7 @@ export default function GameRoom({
   room,
   messages,
   events,
+  onlinePlayerIds,
   busy,
   onAction,
   onSendMessage,
@@ -89,22 +91,25 @@ export default function GameRoom({
         .filter((player): player is NonNullable<typeof player> => player !== undefined)
     : [];
 
-  const resetSelection = () => {
+  const resetSelection = useCallback(() => {
     setMode(null);
     setSelectedCard(null);
     setSelectedRoadIds([]);
     setSelectedShipId(null);
     setPlentyResources([]);
-  };
+  }, []);
 
-  const handleHexClick = (hexId: string) => {
-    if (paused || !isMyTurn) return;
-    if (game.phase === "robber") {
-      void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
-    } else if (game.phase === "pirate") {
-      void onAction({ type: "move-pirate", hexId }).then(resetSelection);
-    }
-  };
+  const handleHexClick = useCallback(
+    (hexId: string) => {
+      if (paused || !isMyTurn) return;
+      if (game.phase === "robber") {
+        void onAction({ type: "move-robber", hexId, victimId: null }).then(resetSelection);
+      } else if (game.phase === "pirate") {
+        void onAction({ type: "move-pirate", hexId }).then(resetSelection);
+      }
+    },
+    [paused, isMyTurn, game.phase, onAction, resetSelection],
+  );
 
   const chooseVictim = (victimId: string) => {
     if (paused) return;
@@ -114,46 +119,52 @@ export default function GameRoom({
     void onAction(action).then(resetSelection);
   };
 
-  const handleVertexClick = (vertexId: string) => {
-    if (paused || !isMyTurn) return;
-    if (game.phase === "setup-settlement") {
-      void onAction({ type: "place-setup-settlement", vertexId }).then(resetSelection);
-    } else if (mode === "settlement") {
-      void onAction({ type: "build-settlement", vertexId }).then(resetSelection);
-    } else if (mode === "city") {
-      void onAction({ type: "build-city", vertexId }).then(resetSelection);
-    }
-  };
+  const handleVertexClick = useCallback(
+    (vertexId: string) => {
+      if (paused || !isMyTurn) return;
+      if (game.phase === "setup-settlement") {
+        void onAction({ type: "place-setup-settlement", vertexId }).then(resetSelection);
+      } else if (mode === "settlement") {
+        void onAction({ type: "build-settlement", vertexId }).then(resetSelection);
+      } else if (mode === "city") {
+        void onAction({ type: "build-city", vertexId }).then(resetSelection);
+      }
+    },
+    [paused, isMyTurn, game.phase, mode, onAction, resetSelection],
+  );
 
-  const handleEdgeClick = (edgeId: string) => {
-    if (paused || !isMyTurn) return;
-    if (game.phase === "setup-road") {
-      const shipLegal = room.legal.shipIds.includes(edgeId);
-      const roadLegal = room.legal.roadIds.includes(edgeId);
-      const kind = shipLegal && (!roadLegal || mode === "ship") ? "ship" : "road";
-      void onAction({ type: "place-setup-road", edgeId, kind }).then(resetSelection);
-    } else if (mode === "road") {
-      void onAction({ type: "build-road", edgeId }).then(resetSelection);
-    } else if (mode === "ship") {
-      void onAction({ type: "build-ship", edgeId }).then(resetSelection);
-    } else if (mode === "move-ship") {
-      if (room.legal.movableShipIds.includes(edgeId)) {
-        setSelectedShipId((current) => (current === edgeId ? null : edgeId));
-        return;
+  const handleEdgeClick = useCallback(
+    (edgeId: string) => {
+      if (paused || !isMyTurn) return;
+      if (game.phase === "setup-road") {
+        const shipLegal = room.legal.shipIds.includes(edgeId);
+        const roadLegal = room.legal.roadIds.includes(edgeId);
+        const kind = shipLegal && (!roadLegal || mode === "ship") ? "ship" : "road";
+        void onAction({ type: "place-setup-road", edgeId, kind }).then(resetSelection);
+      } else if (mode === "road") {
+        void onAction({ type: "build-road", edgeId }).then(resetSelection);
+      } else if (mode === "ship") {
+        void onAction({ type: "build-ship", edgeId }).then(resetSelection);
+      } else if (mode === "move-ship") {
+        if (room.legal.movableShipIds.includes(edgeId)) {
+          setSelectedShipId((current) => (current === edgeId ? null : edgeId));
+          return;
+        }
+        if (selectedShipId && (room.legal.shipMoveTargets[selectedShipId] ?? []).includes(edgeId)) {
+          void onAction({ type: "move-ship", fromEdgeId: selectedShipId, toEdgeId: edgeId }).then(
+            resetSelection,
+          );
+        }
+      } else if (mode === "free-road") {
+        setSelectedRoadIds((current) => {
+          if (current.includes(edgeId)) return current.filter((candidate) => candidate !== edgeId);
+          if (current.length >= 2) return current;
+          return [...current, edgeId];
+        });
       }
-      if (selectedShipId && (room.legal.shipMoveTargets[selectedShipId] ?? []).includes(edgeId)) {
-        void onAction({ type: "move-ship", fromEdgeId: selectedShipId, toEdgeId: edgeId }).then(
-          resetSelection,
-        );
-      }
-    } else if (mode === "free-road") {
-      setSelectedRoadIds((current) => {
-        if (current.includes(edgeId)) return current.filter((candidate) => candidate !== edgeId);
-        if (current.length >= 2) return current;
-        return [...current, edgeId];
-      });
-    }
-  };
+    },
+    [paused, isMyTurn, game.phase, mode, selectedShipId, room.legal, onAction, resetSelection],
+  );
 
   const selectDevelopmentCard = (card: HeldDevelopmentCard | null) => {
     if (!card) {
@@ -212,20 +223,6 @@ export default function GameRoom({
 
   const robberTargetName = pendingVictim?.hexId;
   const requiredPlentyCards = Math.min(2, RESOURCES.reduce((sum, resource) => sum + game.bank[resource], 0));
-
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (room.turnDeadlineAt === null) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(timer);
-  }, [room.turnDeadlineAt]);
-  const remainingMs = room.turnDeadlineAt !== null ? Math.max(0, room.turnDeadlineAt - now) : null;
-  const alarmActive =
-    isMyTurn &&
-    game.phase !== "finished" &&
-    game.phase !== "awaiting-roll" &&
-    remainingMs !== null &&
-    remainingMs <= 8_000;
 
   const [flyingCards, setFlyingCards] = useState<
     Array<{ id: string; resource: Resource; from: { x: number; y: number }; to: { x: number; y: number }; delay: number }>
@@ -494,12 +491,17 @@ export default function GameRoom({
           </h2>
           {game.players.map((player) => {
             const isSelf = player.id === room.selfPlayerId;
+            const isBot = room.players.some(
+              (candidate) => candidate.id === player.id && candidate.isBot,
+            );
             return (
               <PlayerPanel
                 key={player.id}
                 player={player}
                 room={room}
                 self={isSelf}
+                isBot={isBot}
+                online={isBot || onlinePlayerIds.has(player.id)}
                 {...(isSelf ? { totalPoints: game.self.totalVictoryPoints } : {})}
                 longestRoad={game.longestRoadHolderId === player.id}
                 largestArmy={game.largestArmyHolderId === player.id}
@@ -510,7 +512,7 @@ export default function GameRoom({
 
         <section
           className={`relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#8a5a1e] bg-gradient-to-b from-ocean-light to-ocean-deep shadow-[0_4px_0_rgba(30,16,6,0.35),inset_0_0_0_1px_rgba(255,255,255,0.12)] ${
-            alarmActive ? "alarm-active" : isMyTurn && game.phase !== "finished" ? "turn-board-glow" : ""
+            isMyTurn && game.phase !== "finished" ? "turn-board-glow" : ""
           }`}
         >
           <BoardSvg
@@ -525,9 +527,12 @@ export default function GameRoom({
             onHexClick={handleHexClick}
           />
 
-          {alarmActive && (
-            <div className="alarm-overlay pointer-events-none absolute inset-0 z-[4] rounded-2xl" />
-          )}
+          <AlarmOverlay
+            deadlineAt={room.turnDeadlineAt}
+            isMyTurn={isMyTurn}
+            paused={paused}
+            phase={game.phase}
+          />
 
           {game.phase !== "finished" && room.turnDeadlineAt !== null && (
             <TurnClock
@@ -1017,6 +1022,8 @@ function PlayerPanel({
   player,
   room,
   self = false,
+  isBot,
+  online,
   totalPoints,
   longestRoad,
   largestArmy,
@@ -1024,14 +1031,14 @@ function PlayerPanel({
   player: PlayerPublicView;
   room: RoomSnapshot;
   self?: boolean;
+  isBot: boolean;
+  online: boolean;
   totalPoints?: number;
   longestRoad: boolean;
   largestArmy: boolean;
 }) {
-  const lobbyPlayer = room.players.find((candidate) => candidate.id === player.id);
   const points = self ? totalPoints ?? player.publicVictoryPoints : player.publicVictoryPoints;
-  const offline = Boolean(lobbyPlayer && !lobbyPlayer.online);
-  const isBot = Boolean(lobbyPlayer?.isBot);
+  const offline = !online;
   const stat = room.turnStats[player.id];
   const averageMs = stat && stat.turns > 0 ? stat.totalMs / stat.turns : null;
   const averageLabel =
@@ -1181,6 +1188,32 @@ function formatDuration(ms: number): string {
   if (seconds < 60) return `${seconds} s`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes} min ${String(seconds % 60).padStart(2, "0")} s`;
+}
+
+function AlarmOverlay({
+  deadlineAt,
+  isMyTurn,
+  paused,
+  phase,
+}: {
+  deadlineAt: number | null;
+  isMyTurn: boolean;
+  paused: boolean;
+  phase: PlayerGameView["phase"];
+}) {
+  const active =
+    isMyTurn && !paused && phase !== "finished" && phase !== "awaiting-roll" && deadlineAt !== null;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [active, deadlineAt]);
+
+  if (!active || deadlineAt === null || deadlineAt - now > 8_000) return null;
+  return <div className="alarm-overlay pointer-events-none absolute inset-0 z-[4] rounded-2xl" />;
 }
 
 function TurnClock({

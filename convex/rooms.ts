@@ -44,7 +44,7 @@ import { gameActionValidator } from "./validators";
 
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}$/;
 const PRESENCE_STALE_MS = 50_000;
-const PRESENCE_WRITE_THROTTLE_MS = 10_000;
+const PRESENCE_WRITE_THROTTLE_MS = 25_000;
 const MAX_ROOM_PLAYERS = 4;
 const MAX_NAME_LENGTH = 24;
 const MAX_MESSAGE_LENGTH = 500;
