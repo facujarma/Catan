@@ -32,6 +32,9 @@ const VIEW_HEIGHT = 720;
 const ORIGIN_X = VIEW_WIDTH / 2;
 const ORIGIN_Y = VIEW_HEIGHT / 2;
 const SCALE = 72;
+// Distancia del ícono de puerto a su arista, en radios de hexágono. Con 0.62 el
+// cuadrado de 78px queda entero del lado del mar en todos los tableros.
+const PORT_OFFSET = 0.62;
 
 const TERRAIN_FILL: Record<string, string> = {
   wood: "url(#terrain-wood)",
@@ -570,6 +573,10 @@ function BoardSvg({
     () => new Map(game.board.vertices.map((vertex) => [vertex.id, vertex])),
     [game.board.vertices],
   );
+  const hexById = useMemo(
+    () => new Map(game.board.hexes.map((hex) => [hex.id, hex])),
+    [game.board.hexes],
+  );
   const self = playerById.get(selfPlayerId);
   const hasSeaHexes = useMemo(
     () => game.board.hexes.some((hex) => hex.terrain === "sea"),
@@ -1011,11 +1018,35 @@ function BoardSvg({
           if (!first || !second) return null;
           const midpointX = (first.x + second.x) / 2;
           const midpointY = (first.y + second.y) / 2;
-          const distance = Math.hypot(midpointX, midpointY) || 1;
-          const ux = midpointX / distance;
-          const uy = midpointY / distance;
+
+          // Saliente real del puerto: del centro de su hex de tierra hacia la arista.
+          // La radial desde el origen del tablero solo coincide en tableros centrados
+          // (Catan base); en los escenarios las islas están descentradas o el puerto
+          // mira al mar interior, y la radial lo rotaba hacia adentro.
+          const edge = edgeById.get(port.edgeId);
+          const landHex = edge?.hexIds
+            .map((hexId) => hexById.get(hexId))
+            .find((hex) => hex !== undefined && hex.terrain !== "sea");
+          let ux: number;
+          let uy: number;
+          if (landHex) {
+            const [hexX, hexY] = hexCenter(landHex.q, landHex.r);
+            const nx = midpointX - hexX;
+            const ny = midpointY - hexY;
+            const length = Math.hypot(nx, ny) || 1;
+            ux = nx / length;
+            uy = ny / length;
+          } else {
+            const distance = Math.hypot(midpointX, midpointY) || 1;
+            ux = midpointX / distance;
+            uy = midpointY / distance;
+          }
+
           const rotation = (Math.atan2(uy, ux) * 180) / Math.PI + 90;
-          const [iconX, iconY] = project(midpointX + ux * 0.55, midpointY + uy * 0.55);
+          const [iconX, iconY] = project(
+            midpointX + ux * PORT_OFFSET,
+            midpointY + uy * PORT_OFFSET,
+          );
           const iconFile =
             port.type === "generic" ? GENERIC_PORT_FILE : RESOURCE_PORT_FILES[port.type];
           const size = 78;
